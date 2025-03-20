@@ -9,8 +9,9 @@ The EEG Slow Wave Analysis Tool processes CSV files containing EEG data, extract
 ## Data Processing Pipeline
 
 1. **Data Loading and Organization**
-   - Processes EEG data from a directory structure with treatment groups, subjects, and protocols
-   - Supports both new EEG data structure (with Active/SHAM groups) and old SourceRecon structure
+   - Processes EEG data from a directory structure with subjects, nights, and protocols
+   - Uses a Subject_Condition JSON file to map subjects to treatment groups (Active/SHAM)
+   - Allows selection of specific subjects and nights to process
    - Organizes data by protocol and stage (pre, early, late, post)
 
 2. **Slow Wave Analysis**
@@ -64,24 +65,58 @@ The EEG Slow Wave Analysis Tool processes CSV files containing EEG data, extract
 
 ## Data Structure
 
-The code expects EEG data in one of two formats:
-1. **New EEG data structure**:
-   ```
-   EEG_data/
-   ├── Active/
-   │   ├── Subject_1/
-   │   │   └── Night1/
-   │   │       └── Output/
-   │   │           └── SourceRecon/
-   │   │               └── [CSV files]
-   │   └── Subject_2/
-   │       └── ...
-   └── SHAM/
-       ├── Subject_1/
-       │   └── ...
-       └── Subject_2/
-           └── ...
-   ```
+The code expects EEG data in the following format:
+```
+EEG_data/
+├── Subject_001/             # Individual subject
+│   ├── Night1/
+│   │   └── Output/
+│   │       └── SourceRecon/ # Directory containing all CSV files
+│   │           └── [CSV files]
+│   └── Night2/
+│       └── ...
+├── Subject_002/
+└── Subject_003/
+```
+
+Additionally, a Subject_Condition JSON file is required to map subjects to treatment groups:
+```json
+{
+  "Subject_001": "Active",
+  "Subject_002": "Active",
+  "Subject_003": "SHAM",
+  "Subject_004": "SHAM"
+}
+```
+
+### Creating the Subject_Condition JSON File
+
+The Subject_Condition JSON file is a simple mapping of subject IDs to their treatment group. Here's how to create it:
+
+1. Create a new text file with a `.json` extension (e.g., `subject_condition.json`)
+2. Add the mapping in the following format:
+
+```json
+{
+  "Subject_001": "Active",
+  "Subject_002": "Active",
+  "Subject_003": "SHAM",
+  "Subject_004": "SHAM"
+}
+```
+
+3. Make sure each subject ID exactly matches the directory name in your data structure
+4. Treatment group names must be either "Active" or "SHAM" (case-sensitive)
+5. Save the file and provide its path when running the analysis script
+
+Example of creating this file using a text editor:
+```
+1. Open your favorite text editor (Notepad, VS Code, etc.)
+2. Copy and paste the template above
+3. Replace the subject IDs with your actual subject IDs
+4. Set the appropriate treatment group for each subject
+5. Save the file as "subject_condition.json"
+```
 
 CSV files should follow the naming convention: `*proto#*_(pre|early|late|post)-stim*.csv`
 
@@ -101,11 +136,19 @@ The tool generates:
 
 ## Usage
 
-Run the main script and provide the path to your EEG data directory:
+Run the main script:
 
 ```
 python main.py
 ```
+
+The script will prompt you for:
+1. The path to your EEG data directory
+2. The path to the Subject_Condition JSON file
+3. Selection of subjects to process (you can select specific subjects or 'all')
+4. Selection of nights to process (you can select specific nights or 'all')
+
+After providing this information, the script will process the selected data and generate results.
 
 ## Visualization Types
 

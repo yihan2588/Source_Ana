@@ -12,7 +12,9 @@ from utils import (
     extract_region_name,
     calculate_origin_statistics,
     calculate_involvement_statistics,
-    collect_data_by_treatment_group
+    collect_data_by_treatment_group,
+    read_subject_condition_mapping,
+    scan_available_subjects_and_nights
 )
 from stats_utils import (
     perform_involvement_tests,
@@ -114,44 +116,74 @@ def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=
     }
 
 
-def process_eeg_data_directory(directory_path):
+def process_eeg_data_directory(directory_path, subject_condition_mapping, selected_subjects=None, selected_nights=None):
     """
-    Process the EEG data directory with treatment groups, subjects, and protocols.
+    Process the EEG data directory using subject-condition mapping and optional subject/night filtering.
+    
+    Args:
+        directory_path: Path to the EEG data directory
+        subject_condition_mapping: Dictionary mapping subject IDs to conditions (Active/SHAM)
+        selected_subjects: List of subject IDs to process (if None, process all)
+        selected_nights: List of night IDs to process (if None, process all)
     """
     print(f"Processing EEG data directory: {directory_path}")
+    
     # Define the expected treatment groups
     treatment_groups = ["Active", "SHAM"]
-    results_by_treatment_group = {}
+    results_by_treatment_group = {group: {} for group in treatment_groups}
     total_files = 0
     processed_files = 0
     error_files = 0
-
-    # Process each treatment group
-    for group in treatment_groups:
-        group_dir = Path(directory_path) / group
-        if not group_dir.exists():
-            print(f"Warning: Treatment group directory '{group}' not found.")
+    
+    # Get all subject directories
+    subject_dirs = [d for d in Path(directory_path).iterdir() if d.is_dir() and d.name.startswith("Subject_")]
+    
+    # Filter subjects if specified
+    if selected_subjects:
+        subject_dirs = [d for d in subject_dirs if d.name in selected_subjects]
+    
+    if not subject_dirs:
+        print(f"Warning: No subject directories found.")
+        return None
+    
+    print(f"\nProcessing {len(subject_dirs)} subjects...")
+    for subject_dir in subject_dirs:
+        subject_id = subject_dir.name
+        
+        # Skip if subject not in mapping
+        if subject_id not in subject_condition_mapping:
+            print(f"Warning: Subject {subject_id} not found in condition mapping. Skipping.")
             continue
-
-        results_by_treatment_group[group] = {}
-
-        # Process each subject in the group
-        subject_dirs = [d for d in group_dir.iterdir() if d.is_dir() and d.name.startswith("Subject_")]
-        if not subject_dirs:
-            print(f"Warning: No subject directories found in '{group}'.")
+        
+        # Get treatment group for this subject
+        group = subject_condition_mapping[subject_id]
+        if group not in treatment_groups:
+            print(f"Warning: Unknown treatment group '{group}' for {subject_id}. Skipping.")
             continue
-
-        print(f"\nProcessing {len(subject_dirs)} subjects in {group} group...")
-        for subject_dir in subject_dirs:
-            subject_id = subject_dir.name
-            print(f"Processing {subject_id}...")
-
+        
+        print(f"Processing {subject_id} (Group: {group})...")
+        
+        # Get night directories
+        night_dirs = [d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("Night")]
+        
+        # Filter nights if specified
+        if selected_nights:
+            night_dirs = [d for d in night_dirs if d.name in selected_nights]
+        
+        if not night_dirs:
+            print(f"Warning: No night directories found for {subject_id}.")
+            continue
+        
+        for night_dir in night_dirs:
+            night_id = night_dir.name
+            print(f"  Processing {night_id}...")
+            
             # Navigate to the SourceRecon directory
-            source_recon_dir = subject_dir / "Night1" / "Output" / "SourceRecon"
+            source_recon_dir = night_dir / "Output" / "SourceRecon"
             if not source_recon_dir.exists():
-                print(f"Warning: SourceRecon directory not found for {subject_id}.")
+                print(f"Warning: SourceRecon directory not found for {subject_id}/{night_id}.")
                 continue
-
+            
             # Process the CSV files in the SourceRecon directory
             subject_results = process_directory(source_recon_dir, quiet=True)
             if subject_results:
@@ -161,22 +193,22 @@ def process_eeg_data_directory(directory_path):
                         results_by_treatment_group[group][protocol] = {'pre': [], 'early': [], 'late': [], 'post': []}
                     for stage in ['pre', 'early', 'late', 'post']:
                         results_by_treatment_group[group][protocol][stage].extend(subject_results[protocol][stage])
-
+                
                 # Update file counts
                 for protocol in subject_results:
                     for stage in subject_results[protocol]:
                         total_files += len(subject_results[protocol][stage])
                         processed_files += len(subject_results[protocol][stage])
-
+    
     print(f"\nProcessing summary:")
     print(f"Total files: {total_files}")
     print(f"Successfully processed: {processed_files}")
     print(f"Errors: {error_files}")
-
-    if not results_by_treatment_group:
+    
+    if not any(results_by_treatment_group.values()):
         print("No data was processed successfully.")
         return None
-
+    
     return results_by_treatment_group
 
 

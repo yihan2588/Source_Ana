@@ -82,3 +82,50 @@ def collect_data_by_treatment_group(results_by_treatment_group):
                 if stage in results_by_treatment_group[group][protocol]:
                     consolidated_data[group][stage].extend(results_by_treatment_group[group][protocol][stage])
     return consolidated_data
+
+
+def read_subject_condition_mapping(json_path):
+    """
+    Read the Subject_Condition JSON file and return a mapping of subject IDs to conditions.
+    
+    Args:
+        json_path: Path to the JSON file containing subject-condition mappings
+        
+    Returns:
+        Dictionary mapping subject IDs to conditions (Active/SHAM) or None if error
+    """
+    import json
+    try:
+        with open(json_path, 'r') as f:
+            mapping = json.load(f)
+        return mapping
+    except Exception as e:
+        print(f"Error reading Subject_Condition JSON file: {str(e)}")
+        return None
+
+
+def scan_available_subjects_and_nights(directory_path):
+    """
+    Scan the directory for available subjects and nights.
+    
+    Args:
+        directory_path: Path to the EEG data directory
+        
+    Returns:
+        Tuple of (subjects, nights) where each is a sorted list of available options
+    """
+    from pathlib import Path
+    
+    subjects = []
+    nights = set()
+    
+    dir_path = Path(directory_path)
+    subject_dirs = [d for d in dir_path.iterdir() if d.is_dir() and d.name.startswith("Subject_")]
+    
+    for subject_dir in subject_dirs:
+        subjects.append(subject_dir.name)
+        night_dirs = [d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("Night")]
+        for night_dir in night_dirs:
+            nights.add(night_dir.name)
+    
+    return sorted(subjects), sorted(list(nights))

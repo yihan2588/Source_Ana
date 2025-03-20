@@ -23,7 +23,11 @@ from save_results import (
     save_proto_specific_comparison_results,
     save_within_group_stage_comparison_results
 )
-from utils import compute_master_region_list
+from utils import (
+    compute_master_region_list,
+    read_subject_condition_mapping,
+    scan_available_subjects_and_nights
+)
 
 
 def main():
@@ -31,33 +35,76 @@ def main():
     if not os.path.isdir(directory_path):
         print(f"Error: '{directory_path}' is not a valid directory.")
         return
-
-    # Check if the directory is the new EEG_data structure or the old SourceRecon structure
-    if any(Path(directory_path).glob("Active")) or any(Path(directory_path).glob("SHAM")):
-        print("Detected new EEG data structure with treatment groups...")
-
-        # Process the new directory structure with treatment groups
-        results_by_treatment_group = process_eeg_data_directory(directory_path)
-        if results_by_treatment_group is None:
-            return
-
-        # Flatten the results for protocol-level analysis
-        results_by_protocol = {}
-        for group in results_by_treatment_group:
-            for protocol in results_by_treatment_group[group]:
-                if protocol not in results_by_protocol:
-                    results_by_protocol[protocol] = {'pre': [], 'early': [], 'late': [], 'post': []}
-                for stage in ['pre', 'early', 'late', 'post']:
-                    results_by_protocol[protocol][stage].extend(results_by_treatment_group[group][protocol][stage])
+    
+    # Get path to Subject_Condition JSON file
+    json_path = input("Enter the path to the Subject_Condition JSON file: ").strip()
+    if not os.path.isfile(json_path):
+        print(f"Error: '{json_path}' is not a valid file.")
+        return
+    
+    # Read subject-condition mapping
+    subject_condition_mapping = read_subject_condition_mapping(json_path)
+    if not subject_condition_mapping:
+        return
+    
+    # Scan for available subjects and nights
+    subjects, nights = scan_available_subjects_and_nights(directory_path)
+    
+    # Display available subjects
+    print("\nAvailable subjects:")
+    for i, subject in enumerate(subjects, 1):
+        print(f"{i}. {subject}")
+    
+    # Get user selection for subjects
+    subject_input = input("\nEnter the numbers of subjects to process (comma-separated, or 'all'): ").strip()
+    if subject_input.lower() == 'all':
+        selected_subjects = subjects
     else:
-        print("Detected old SourceRecon structure...")
-        # Process individual CSV files by protocol (old method)
-        results_by_protocol = process_directory(directory_path)
-        if results_by_protocol is None:
+        try:
+            selected_indices = [int(idx.strip()) - 1 for idx in subject_input.split(',')]
+            selected_subjects = [subjects[idx] for idx in selected_indices if 0 <= idx < len(subjects)]
+        except (ValueError, IndexError):
+            print("Invalid input. Please enter comma-separated numbers.")
             return
-
-        # Create a dummy treatment group structure for compatibility
-        results_by_treatment_group = {'SingleGroup': results_by_protocol}
+    
+    # Display available nights
+    print("\nAvailable nights:")
+    for i, night in enumerate(nights, 1):
+        print(f"{i}. {night}")
+    
+    # Get user selection for nights
+    night_input = input("\nEnter the numbers of nights to process (comma-separated, or 'all'): ").strip()
+    if night_input.lower() == 'all':
+        selected_nights = nights
+    else:
+        try:
+            selected_indices = [int(idx.strip()) - 1 for idx in night_input.split(',')]
+            selected_nights = [nights[idx] for idx in selected_indices if 0 <= idx < len(nights)]
+        except (ValueError, IndexError):
+            print("Invalid input. Please enter comma-separated numbers.")
+            return
+    
+    print(f"\nProcessing {len(selected_subjects)} subjects and {len(selected_nights)} nights...")
+    
+    # Process the directory with the subject-condition mapping and selections
+    results_by_treatment_group = process_eeg_data_directory(
+        directory_path, 
+        subject_condition_mapping,
+        selected_subjects,
+        selected_nights
+    )
+    
+    if results_by_treatment_group is None:
+        return
+    
+    # Flatten the results for protocol-level analysis
+    results_by_protocol = {}
+    for group in results_by_treatment_group:
+        for protocol in results_by_treatment_group[group]:
+            if protocol not in results_by_protocol:
+                results_by_protocol[protocol] = {'pre': [], 'early': [], 'late': [], 'post': []}
+            for stage in ['pre', 'early', 'late', 'post']:
+                results_by_protocol[protocol][stage].extend(results_by_treatment_group[group][protocol][stage])
 
     print("\n=== Overall Data Summary ===")
     for group in results_by_treatment_group:
