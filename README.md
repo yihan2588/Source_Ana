@@ -65,21 +65,27 @@ The EEG Slow Wave Analysis Tool processes CSV files containing EEG data, extract
 
 ## Data Structure
 
-The code expects EEG data in the following format:
+The code expects data in the following format:
 ```
-EEG_data/
-├── Subject_001/             # Individual subject
-│   ├── Night1/
-│   │   └── Output/
-│   │       └── SourceRecon/ # Directory containing all CSV files
-│   │           └── [CSV files]
-│   └── Night2/
-│       └── ...
-├── Subject_002/
-└── Subject_003/
+Data Directory/
+├── Assets/
+│   └── 256_net_temp.xyz       # EEG electrode template file (256 channels)
+├── Structural/
+│   └── m2m_XXX/               # FreeSurfer-formatted anatomical data
+├── Subject_Condition.json     # Maps subjects to treatment groups (Active/SHAM)
+└── EEG_data/
+    ├── Subject_001/           # Individual subject
+    │   ├── Night1/
+    │   │   └── Output/
+    │   │       └── SourceRecon/ # Directory containing all CSV files
+    │   │           └── [CSV files]
+    │   └── Night2/
+    │       └── ...
+    ├── Subject_002/
+    └── Subject_003/
 ```
 
-Additionally, a Subject_Condition JSON file is required to map subjects to treatment groups:
+The Subject_Condition.json file maps subjects to treatment groups:
 ```json
 {
   "Subject_001": "Active",
@@ -143,12 +149,11 @@ python main.py
 ```
 
 The script will prompt you for:
-1. The path to your EEG data directory
-2. The path to the Subject_Condition JSON file
-3. Selection of subjects to process (you can select specific subjects or 'all')
-4. Selection of nights to process (you can select specific nights or 'all')
+1. The path to your data directory (containing EEG_data, Subject_Condition.json, etc.)
+2. Selection of subjects to process (you can select specific subjects or 'all')
+3. Selection of nights to process (you can select specific nights or 'all')
 
-After providing this information, the script will process the selected data and generate results.
+The script will automatically find the EEG_data subdirectory and Subject_Condition.json file in the provided directory, then process the selected data and generate results.
 
 ## Visualization Types
 

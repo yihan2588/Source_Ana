@@ -31,15 +31,21 @@ from utils import (
 
 
 def main():
-    directory_path = input("Enter the path to your EEG data directory: ").strip()
-    if not os.path.isdir(directory_path):
-        print(f"Error: '{directory_path}' is not a valid directory.")
+    data_directory = input("Enter the path to your data directory: ").strip()
+    if not os.path.isdir(data_directory):
+        print(f"Error: '{data_directory}' is not a valid directory.")
         return
     
-    # Get path to Subject_Condition JSON file
-    json_path = input("Enter the path to the Subject_Condition JSON file: ").strip()
+    # Find EEG_data subdirectory
+    eeg_data_path = os.path.join(data_directory, "EEG_data")
+    if not os.path.isdir(eeg_data_path):
+        print(f"Error: EEG_data directory not found in '{data_directory}'.")
+        return
+    
+    # Find Subject_Condition.json file
+    json_path = os.path.join(data_directory, "Subject_Condition.json")
     if not os.path.isfile(json_path):
-        print(f"Error: '{json_path}' is not a valid file.")
+        print(f"Error: Subject_Condition.json file not found in '{data_directory}'.")
         return
     
     # Read subject-condition mapping
@@ -48,7 +54,7 @@ def main():
         return
     
     # Scan for available subjects and nights
-    subjects, nights = scan_available_subjects_and_nights(directory_path)
+    subjects, nights = scan_available_subjects_and_nights(eeg_data_path)
     
     # Display available subjects
     print("\nAvailable subjects:")
@@ -88,7 +94,7 @@ def main():
     
     # Process the directory with the subject-condition mapping and selections
     results_by_treatment_group = process_eeg_data_directory(
-        directory_path, 
+        eeg_data_path, 
         subject_condition_mapping,
         selected_subjects,
         selected_nights
