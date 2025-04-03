@@ -92,12 +92,17 @@ def main():
     
     print(f"\nProcessing {len(selected_subjects)} subjects and {len(selected_nights)} nights...")
     
+    # The source directory is where we'll create the "Source_Ana" directory for results
+    source_dir = data_directory
+    
     # Process the directory with the subject-condition mapping and selections
     results_by_treatment_group = process_eeg_data_directory(
         eeg_data_path, 
         subject_condition_mapping,
         selected_subjects,
-        selected_nights
+        selected_nights,
+        visualize_regions=True,
+        source_dir=source_dir
     )
     
     if results_by_treatment_group is None:
@@ -146,21 +151,21 @@ def main():
         
         # 1. Treatment group comparison (Active vs. SHAM)
         print("\n--- Overall Treatment Group Comparison (Active vs. SHAM) ---")
-        visualize_overall_treatment_comparison(overall_comparison_results, output_dir="results")
+        visualize_overall_treatment_comparison(overall_comparison_results, output_dir="results", source_dir=source_dir)
         
         # 2. Protocol-specific treatment comparison
         print("\n--- Protocol-Specific Treatment Comparison ---")
-        visualize_proto_specific_comparison(proto_specific_results, output_dir="results")
+        visualize_proto_specific_comparison(proto_specific_results, output_dir="results", source_dir=source_dir)
         
         # 3. Within-treatment-group stage comparison
         print("\n--- Within-Group Stage Comparison ---")
-        visualize_within_group_stage_comparison(within_group_results, output_dir="results")
+        visualize_within_group_stage_comparison(within_group_results, output_dir="results", source_dir=source_dir)
 
         # Save all CSV results from the new analyses
-        treatment_comparison_files = save_treatment_comparison_results(treatment_comparison_results, output_dir="results")
-        overall_comparison_files = save_overall_treatment_comparison_results(overall_comparison_results, output_dir="results")
-        proto_specific_files = save_proto_specific_comparison_results(proto_specific_results, output_dir="results")
-        within_group_files = save_within_group_stage_comparison_results(within_group_results, output_dir="results")
+        treatment_comparison_files = save_treatment_comparison_results(treatment_comparison_results, output_dir="results", source_dir=source_dir)
+        overall_comparison_files = save_overall_treatment_comparison_results(overall_comparison_results, output_dir="results", source_dir=source_dir)
+        proto_specific_files = save_proto_specific_comparison_results(proto_specific_results, output_dir="results", source_dir=source_dir)
+        within_group_files = save_within_group_stage_comparison_results(within_group_results, output_dir="results", source_dir=source_dir)
     else:
         treatment_comparison_results = None
         treatment_comparison_files = {}
@@ -173,7 +178,7 @@ def main():
     visualize_results(results_by_protocol, master_region_list)
 
     # Save CSV files for individual protocols
-    stats_files = save_statistical_results(analysis_results, output_dir="results")
+    stats_files = save_statistical_results(analysis_results, output_dir="results", source_dir=source_dir)
 
     print("\nAnalysis complete. Results have been printed, saved, and visualizations have been created.")
 

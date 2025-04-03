@@ -2,7 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
+import re
 from collections import Counter
+from utils import extract_region_name
 
 def visualize_results(all_results, master_region_list):
     """
@@ -479,11 +481,19 @@ def create_combined_origin_comparison_barplot(origin_data,
     plt.close()
 
 
-def visualize_overall_treatment_comparison(overall_comparison_results, output_dir="results"):
+def visualize_overall_treatment_comparison(overall_comparison_results, output_dir="results", source_dir=None):
     """
     Create visualizations for the overall treatment group comparison
     (collapsing subjects, nights, and protos).
+    
+    Args:
+        overall_comparison_results: Results from overall treatment comparison
+        output_dir: Directory to save visualizations (defaults to "results")
+        source_dir: Source directory where data is read from, used to construct output path
     """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(output_dir, exist_ok=True)
     stages = ['pre', 'early', 'late', 'post']
 
@@ -616,10 +626,18 @@ def visualize_overall_treatment_comparison(overall_comparison_results, output_di
         )
 
 
-def visualize_proto_specific_comparison(proto_specific_results, output_dir="results"):
+def visualize_proto_specific_comparison(proto_specific_results, output_dir="results", source_dir=None):
     """
     Create visualizations for the proto-specific comparison.
+    
+    Args:
+        proto_specific_results: Results from proto-specific comparison
+        output_dir: Directory to save visualizations (defaults to "results")
+        source_dir: Source directory where data is read from, used to construct output path
     """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(output_dir, exist_ok=True)
 
     stages = ['pre', 'early', 'late', 'post']
@@ -770,10 +788,169 @@ def visualize_proto_specific_comparison(proto_specific_results, output_dir="resu
             )
 
 
-def visualize_within_group_stage_comparison(within_group_results, output_dir="results"):
+def visualize_region_time_series(wave_data, csv_file, output_dir="results", source_dir=None):
+    """
+    Visualize the time series data for each brain region.
+    
+    Args:
+        wave_data: Dictionary containing the results from analyze_slow_wave
+        csv_file: Path to the original CSV file containing the time series data
+        output_dir: Directory to save the output plots (defaults to "results")
+        source_dir: Source directory where the data is read from, used to construct the output path
+    
+    This function:
+    1. Groups voxels by region
+    2. Plots time series data for each region (-50ms to 50ms)
+    3. Marks local maxima with blue dots
+    4. Marks origins with red dots
+    """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extract protocol and stage from wave_name
+    protocol = "unknown"
+    stage = "unknown"
+    
+    # Extract protocol and stage from the wave name
+    wave_name = wave_data["wave_name"]
+    protocol_match = re.search(r'(proto\d+)', wave_name, re.IGNORECASE)
+    stage_match = re.search(r'(pre|early|late|post)-stim', wave_name, re.IGNORECASE)
+    
+    if protocol_match:
+        protocol = protocol_match.group(1).lower()
+    if stage_match:
+        stage = stage_match.group(1).lower()
+        
+    # Create subdirectories
+    plot_dir = os.path.join(output_dir, "region_plots", protocol, stage)
+    os.makedirs(plot_dir, exist_ok=True)
+    
+    # Load the CSV data
+    try:
+        df = pd.read_csv(csv_file)
+        
+        # Extract time points and convert to ms
+        if 'Time' in df.columns:
+            numeric_cols = []
+            for col in df.columns[1:]:
+                if not str(col).startswith('Unnamed'):
+                    try:
+                        float(col)  # test if col is numeric
+                        numeric_cols.append(col)
+                    except ValueError:
+                        continue
+            
+            time_points = np.array([float(t) for t in numeric_cols]) * 1000  # Convert to ms
+            data = np.abs(df.loc[:, numeric_cols].values)
+            voxel_names = df.iloc[:, 0].values
+            
+            # Filter time points to the window of -50ms to 50ms
+            window_start = -50  # ms
+            window_end = 50     # ms
+            window_mask = (time_points >= window_start) & (time_points <= window_end)
+            
+            if sum(window_mask) == 0:
+                print(f"Warning: No time points found in window [{window_start}, {window_end}] ms")
+                return
+            
+            window_times = time_points[window_mask]
+            window_data = data[:, window_mask]
+            
+            # Group voxels by region
+            region_voxels = {}
+            for i, voxel_name in enumerate(voxel_names):
+                region = extract_region_name(voxel_name)
+                if region not in region_voxels:
+                    region_voxels[region] = []
+                region_voxels[region].append(i)
+            
+            # Calculate average time series for each region
+            region_time_series = {}
+            for region, voxel_indices in region_voxels.items():
+                region_data = np.mean(window_data[voxel_indices, :], axis=0)
+                region_time_series[region] = region_data
+            
+            # Create a figure for all regions
+            plt.figure(figsize=(10, 8))
+            
+            # Store local maxima for each region
+            region_maxima = {}
+            
+            # Plot time series for each region
+            for region, time_series in region_time_series.items():
+                # Plot the time series
+                plt.plot(window_times, time_series, label=region)
+                
+                # Find local maxima
+                maxima_indices = []
+                for i in range(1, len(time_series)-1):
+                    if time_series[i] > time_series[i-1] and time_series[i] > time_series[i+1]:
+                        maxima_indices.append(i)
+                
+                # Mark local maxima with blue dots
+                if maxima_indices:
+                    max_times = window_times[maxima_indices]
+                    max_values = time_series[maxima_indices]
+                    plt.scatter(max_times, max_values, color='blue', s=30, zorder=3)
+                    region_maxima[region] = list(zip(max_times, max_values))
+            
+            # Mark origins with red dots
+            if 'origins' in wave_data and not wave_data['origins'].empty:
+                for _, row in wave_data['origins'].iterrows():
+                    region = row['region']
+                    origin_time = row['peak_time']
+                    
+                    # Find the closest time point in window_times
+                    idx = np.argmin(np.abs(window_times - origin_time))
+                    if region in region_time_series:
+                        origin_value = region_time_series[region][idx]
+                        plt.scatter(window_times[idx], origin_value, color='red', s=50, marker='*', zorder=4)
+            
+            # Add labels and title
+            plt.xlabel('Time (ms)')
+            plt.ylabel('Amplitude')
+            plt.title(f'Region Time Series - {wave_name}')
+            plt.axvline(x=0, color='gray', linestyle='--', alpha=0.5)  # Mark t=0
+            
+            # Add legend with smaller font
+            plt.legend(fontsize='small', loc='upper right')
+            
+            # Adjust layout
+            plt.tight_layout()
+            
+            # Save the figure
+            filename = os.path.join(plot_dir, f"{wave_name}_region_time_series.png")
+            plt.savefig(filename)
+            print(f"Saved region time series plot as '{filename}'")
+            plt.close()
+            
+            return True
+            
+        else:
+            print(f"Error: CSV format doesn't match expected format")
+            return False
+            
+    except Exception as e:
+        print(f"Error visualizing region time series: {str(e)}")
+        return False
+
+
+def visualize_within_group_stage_comparison(within_group_results, output_dir="results", source_dir=None):
     """
     Create visualizations for the within-group stage comparison.
+    
+    Args:
+        within_group_results: Results from within-group stage comparison
+        output_dir: Directory to save visualizations (defaults to "results")
+        source_dir: Source directory where data is read from, used to construct output path
     """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(output_dir, exist_ok=True)
     stages = ['pre', 'early', 'late', 'post']
     master_region_list = within_group_results['master_region_list']

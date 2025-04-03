@@ -116,7 +116,7 @@ def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=
     }
 
 
-def process_eeg_data_directory(directory_path, subject_condition_mapping, selected_subjects=None, selected_nights=None):
+def process_eeg_data_directory(directory_path, subject_condition_mapping, selected_subjects=None, selected_nights=None, visualize_regions=True, source_dir=None):
     """
     Process the EEG data directory using subject-condition mapping and optional subject/night filtering.
     
@@ -125,6 +125,8 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
         subject_condition_mapping: Dictionary mapping subject IDs to conditions (Active/SHAM)
         selected_subjects: List of subject IDs to process (if None, process all)
         selected_nights: List of night IDs to process (if None, process all)
+        visualize_regions: If True, generate region visualizations
+        source_dir: Source directory where data is read from, used to construct output path
     """
     print(f"Processing EEG data directory: {directory_path}")
     
@@ -185,7 +187,7 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
                 continue
             
             # Process the CSV files in the SourceRecon directory
-            subject_results = process_directory(source_recon_dir, quiet=True)
+            subject_results = process_directory(source_recon_dir, quiet=True, visualize_regions=visualize_regions, source_dir=source_dir)
             if subject_results:
                 # Merge the subject results into the treatment group results
                 for protocol in subject_results:
@@ -212,9 +214,15 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
     return results_by_treatment_group
 
 
-def process_directory(directory_path, quiet=False):
+def process_directory(directory_path, quiet=False, visualize_regions=True, source_dir=None):
     """
     Process all CSV files in the directory and organize by protocol and stage.
+    
+    Args:
+        directory_path: Path to the directory containing CSV files
+        quiet: If True, suppress most output
+        visualize_regions: If True, generate region visualizations
+        source_dir: Source directory where data is read from, used to construct output path
     """
     if not quiet:
         print(f"Processing directory: {directory_path}")
@@ -249,6 +257,13 @@ def process_directory(directory_path, quiet=False):
                 result = analyze_slow_wave(df, wave_name, debug=False)
                 results_by_protocol[protocol][stage].append(result)
                 processed_files += 1
+                
+                # Generate region time series visualization
+                if visualize_regions:
+                    from visualize import visualize_region_time_series
+                    # Use source_dir if provided, otherwise use the standard 'results' directory
+                    visualize_region_time_series(result, csv_file, output_dir="results", source_dir=source_dir)
+                
                 if not quiet:
                     print(f"Processed {filename} - Protocol: {protocol}, Stage: {stage}")
             except Exception as e:

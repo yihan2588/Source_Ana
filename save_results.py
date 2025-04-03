@@ -4,8 +4,18 @@ import numpy as np
 from collections import Counter
 from utils import collect_wave_level_data
 
-def save_statistical_results(analysis_results, output_dir="."):
-    """Save statistical results for individual protocols to CSV files"""
+def save_statistical_results(analysis_results, output_dir=".", source_dir=None):
+    """
+    Save statistical results for individual protocols to CSV files
+    
+    Args:
+        analysis_results: Results from individual protocol analysis
+        output_dir: Directory to save results (defaults to current directory)
+        source_dir: Source directory where data is read from, used to construct output path
+    """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     print("\n=== Saving Statistical Results for Individual Protocols ===")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -78,8 +88,18 @@ def save_statistical_results(analysis_results, output_dir="."):
         'test_results': stats_file
     }
 
-def save_treatment_comparison_results(treatment_comparison_results, output_dir="."):
-    """Save treatment comparison results to CSV files"""
+def save_treatment_comparison_results(treatment_comparison_results, output_dir=".", source_dir=None):
+    """
+    Save treatment comparison results to CSV files
+    
+    Args:
+        treatment_comparison_results: Results from treatment comparison analysis
+        output_dir: Directory to save results (defaults to current directory)
+        source_dir: Source directory where data is read from, used to construct output path
+    """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     print("\n=== Saving Treatment Comparison Results ===")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -146,8 +166,18 @@ def save_treatment_comparison_results(treatment_comparison_results, output_dir="
         'treatment_comparison_tests': tests_file
     }
 
-def save_overall_treatment_comparison_results(overall_comparison_results, output_dir="."):
-    """Save overall treatment comparison results to CSV files"""
+def save_overall_treatment_comparison_results(overall_comparison_results, output_dir=".", source_dir=None):
+    """
+    Save overall treatment comparison results to CSV files
+    
+    Args:
+        overall_comparison_results: Results from overall treatment comparison
+        output_dir: Directory to save results (defaults to current directory)
+        source_dir: Source directory where data is read from, used to construct output path
+    """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     print("\n=== Saving Overall Treatment Comparison Results ===")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -214,8 +244,18 @@ def save_overall_treatment_comparison_results(overall_comparison_results, output
         'overall_comparison_tests': tests_file
     }
 
-def save_proto_specific_comparison_results(proto_specific_results, output_dir="."):
-    """Save proto-specific comparison results to CSV files"""
+def save_proto_specific_comparison_results(proto_specific_results, output_dir=".", source_dir=None):
+    """
+    Save proto-specific comparison results to CSV files
+    
+    Args:
+        proto_specific_results: Results from proto-specific comparison
+        output_dir: Directory to save results (defaults to current directory)
+        source_dir: Source directory where data is read from, used to construct output path
+    """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     print("\n=== Saving Proto-Specific Comparison Results ===")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -291,8 +331,18 @@ def save_proto_specific_comparison_results(proto_specific_results, output_dir=".
         'proto_specific_comparison_tests': tests_file
     }
 
-def save_within_group_stage_comparison_results(within_group_results, output_dir="."):
-    """Save within-group stage comparison results to CSV files"""
+def save_within_group_stage_comparison_results(within_group_results, output_dir=".", source_dir=None):
+    """
+    Save within-group stage comparison results to CSV files
+    
+    Args:
+        within_group_results: Results from within-group stage comparison
+        output_dir: Directory to save results (defaults to current directory)
+        source_dir: Source directory where data is read from, used to construct output path
+    """
+    # If source_dir is provided, create "Source_Ana" in the source directory
+    if source_dir:
+        output_dir = os.path.join(source_dir, "Source_Ana")
     print("\n=== Saving Within-Group Stage Comparison Results ===")
     os.makedirs(output_dir, exist_ok=True)
     
