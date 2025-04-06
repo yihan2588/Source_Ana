@@ -16,6 +16,55 @@ from utils import (
     read_subject_condition_mapping,
     scan_available_subjects_and_nights
 )
+
+
+def validate_wave_result(result, csv_file_path=None):
+    """
+    Print and save validation information for a single wave file output.
+    
+    Args:
+        result: Dictionary containing wave analysis results from analyze_slow_wave()
+        csv_file_path: Path to the original CSV file (to save log file next to it)
+    """
+    wave_name = result['wave_name']
+    involvement_percentage = result['involvement_percentage']
+    involvement_count = result['involvement_count']
+    
+    # Prepare validation output
+    validation_lines = []
+    validation_lines.append(f"[VALIDATION] Wave: {wave_name}")
+    validation_lines.append(f"[VALIDATION] Involvement: {involvement_percentage:.2f}% ({involvement_count} voxels)")
+    
+    # Add origin information
+    origins = result.get('origins', None)
+    if origins is not None and not origins.empty:
+        validation_lines.append(f"[VALIDATION] Origin Regions ({len(origins)} regions):")
+        for _, row in origins.iterrows():
+            validation_lines.append(f"[VALIDATION]   - {row['region']} at {row['peak_time']:.2f}ms")
+    else:
+        validation_lines.append("[VALIDATION] No origin regions detected")
+    
+    # Add window and threshold information
+    window = result.get('window', (0, 0))
+    threshold = result.get('threshold', 0)
+    validation_lines.append(f"[VALIDATION] Window: {window[0]}ms to {window[1]}ms, Threshold: {threshold:.6f}")
+    validation_lines.append("[VALIDATION] ------------------------------")
+    
+    # Print to console
+    for line in validation_lines:
+        print(line)
+    
+    # Save to log file if CSV path is provided
+    if csv_file_path:
+        try:
+            # Create log file next to the original CSV
+            log_file_path = str(csv_file_path).replace('.csv', '.log')
+            with open(log_file_path, 'w') as log_file:
+                for line in validation_lines:
+                    log_file.write(f"{line}\n")
+            print(f"[VALIDATION] Saved validation log to: {log_file_path}")
+        except Exception as e:
+            print(f"[VALIDATION] Error saving validation log: {str(e)}")
 from stats_utils import (
     perform_involvement_tests,
     perform_origin_distribution_tests,
@@ -255,6 +304,10 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
                 df = pd.read_csv(csv_file)
                 wave_name = csv_file.stem
                 result = analyze_slow_wave(df, wave_name, debug=False)
+                
+                # Validate, print, and save wave result information
+                validate_wave_result(result, csv_file)
+                
                 results_by_protocol[protocol][stage].append(result)
                 processed_files += 1
                 

@@ -922,10 +922,18 @@ def visualize_region_time_series(wave_data, csv_file, output_dir="results", sour
             # Adjust layout
             plt.tight_layout()
             
-            # Save the figure
+            # Save the figure to the organized directory structure
             filename = os.path.join(plot_dir, f"{wave_name}_region_time_series.png")
             plt.savefig(filename)
             print(f"Saved region time series plot as '{filename}'")
+            
+            # Save a copy next to the original CSV file
+            csv_dir = os.path.dirname(str(csv_file))
+            csv_basename = os.path.basename(str(csv_file))
+            local_filename = os.path.join(csv_dir, f"{os.path.splitext(csv_basename)[0]}_region_time_series.png")
+            plt.savefig(local_filename)
+            print(f"Saved copy of region time series plot next to CSV as '{local_filename}'")
+            
             plt.close()
             
             return True
