@@ -55,9 +55,22 @@ def create_involvement_summary(all_results, protocols):
     stages_list = []
     means = []
     errors = []
+    
+    # Get all stages across all protocols
+    all_stages = set()
+    for protocol in protocols:
+        all_stages.update(all_results[protocol].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
 
     for protocol in protocols:
-        for stage in ['pre', 'early', 'late', 'post']:
+        for stage in stages:
             if stage in all_results[protocol] and all_results[protocol][stage]:
                 protocols_list.append(protocol)
                 stages_list.append(stage)
@@ -74,7 +87,7 @@ def create_involvement_summary(all_results, protocols):
 
     if not summary_df.empty:
         plt.figure(figsize=(12, 6))
-        stage_colors = {'pre': 'skyblue', 'early': 'lightgreen', 'late': 'salmon', 'post': 'gold'}
+        stage_colors = {'pre': 'skyblue', 'early': 'lightgreen', 'late': 'salmon', 'post': 'gold', 'stim': 'purple'}
 
         for protocol in protocols:
             proto_data = summary_df[summary_df['Protocol'] == protocol]
@@ -495,7 +508,20 @@ def visualize_overall_treatment_comparison(overall_comparison_results, output_di
     if source_dir:
         output_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(output_dir, exist_ok=True)
-    stages = ['pre', 'early', 'late', 'post']
+    
+    # Get all stages from the involvement data
+    involvement_stats = overall_comparison_results['overall_involvement_stats']
+    all_stages = set()
+    for group in involvement_stats:
+        all_stages.update(involvement_stats[group].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
 
     involvement_stats = overall_comparison_results['overall_involvement_stats']
     origin_data = overall_comparison_results['overall_origin_data']
@@ -640,7 +666,20 @@ def visualize_proto_specific_comparison(proto_specific_results, output_dir="resu
         output_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(output_dir, exist_ok=True)
 
-    stages = ['pre', 'early', 'late', 'post']
+    # Get all stages from the protocol-specific results
+    proto_results = proto_specific_results['proto_specific_results']
+    all_stages = set()
+    for protocol in proto_results:
+        for group in proto_results[protocol]['involvement_stats']:
+            all_stages.update(proto_results[protocol]['involvement_stats'][group].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
     master_region_list = proto_specific_results['master_region_list']
     proto_results = proto_specific_results['proto_specific_results']
 
@@ -818,7 +857,7 @@ def visualize_region_time_series(wave_data, csv_file, output_dir="results", sour
     # Extract protocol and stage from the wave name
     wave_name = wave_data["wave_name"]
     protocol_match = re.search(r'(proto\d+)', wave_name, re.IGNORECASE)
-    stage_match = re.search(r'(pre|early|late|post)-stim', wave_name, re.IGNORECASE)
+    stage_match = re.search(r'(pre|early|late|post|stim)(?:-stim)?', wave_name, re.IGNORECASE)
     
     if protocol_match:
         protocol = protocol_match.group(1).lower()
@@ -960,7 +999,20 @@ def visualize_within_group_stage_comparison(within_group_results, output_dir="re
     if source_dir:
         output_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(output_dir, exist_ok=True)
-    stages = ['pre', 'early', 'late', 'post']
+    
+    # Get all stages from the within-group results
+    results_dict = within_group_results['within_group_results']
+    all_stages = set()
+    for group in results_dict:
+        all_stages.update(results_dict[group]['involvement_stats'].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
     master_region_list = within_group_results['master_region_list']
     results_dict = within_group_results['within_group_results']
 

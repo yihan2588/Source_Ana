@@ -5,7 +5,6 @@ from analysis import (
     process_directory,
     process_eeg_data_directory,
     analyze_protocol_results,
-    analyze_treatment_groups,
     analyze_overall_treatment_comparison,
     analyze_proto_specific_comparison,
     analyze_within_group_stage_comparison
@@ -110,11 +109,21 @@ def main():
     
     # Flatten the results for protocol-level analysis
     results_by_protocol = {}
+    
+    # Collect all possible stages across all protocols and groups
+    all_stages = set()
+    for group in results_by_treatment_group:
+        for protocol in results_by_treatment_group[group]:
+            all_stages.update(results_by_treatment_group[group][protocol].keys())
+    
+    # Create the flattened protocol results with all available stages
     for group in results_by_treatment_group:
         for protocol in results_by_treatment_group[group]:
             if protocol not in results_by_protocol:
-                results_by_protocol[protocol] = {'pre': [], 'early': [], 'late': [], 'post': []}
-            for stage in ['pre', 'early', 'late', 'post']:
+                results_by_protocol[protocol] = {stage: [] for stage in all_stages}
+            
+            # For each stage that exists in this group's protocol, extend the results
+            for stage in results_by_treatment_group[group][protocol]:
                 results_by_protocol[protocol][stage].extend(results_by_treatment_group[group][protocol][stage])
 
     print("\n=== Overall Data Summary ===")
@@ -136,7 +145,6 @@ def main():
     # If we have multiple treatment groups, analyze and compare them
     if len(results_by_treatment_group) > 1:
         print("\n=== Analyzing Treatment Groups ===")
-        treatment_comparison_results = analyze_treatment_groups(results_by_treatment_group, master_region_list)
 
         # New analyses
         # 1. Overall Treatment Group Comparison (Collapsing Subjects, Nights, and Protos)
@@ -162,12 +170,12 @@ def main():
         visualize_within_group_stage_comparison(within_group_results, output_dir="results", source_dir=source_dir)
 
         # Save all CSV results from the new analyses
-        treatment_comparison_files = save_treatment_comparison_results(treatment_comparison_results, output_dir="results", source_dir=source_dir)
+        # Legacy save_treatment_comparison_results function will use the overall_comparison_results instead
+        treatment_comparison_files = save_treatment_comparison_results(overall_comparison_results, output_dir="results", source_dir=source_dir)
         overall_comparison_files = save_overall_treatment_comparison_results(overall_comparison_results, output_dir="results", source_dir=source_dir)
         proto_specific_files = save_proto_specific_comparison_results(proto_specific_results, output_dir="results", source_dir=source_dir)
         within_group_files = save_within_group_stage_comparison_results(within_group_results, output_dir="results", source_dir=source_dir)
     else:
-        treatment_comparison_results = None
         treatment_comparison_files = {}
         overall_comparison_results = None
         proto_specific_results = None
@@ -191,7 +199,7 @@ def main():
         elif file_path is not None:
             print(f" - {file_path}")
 
-    if treatment_comparison_results:
+    if overall_comparison_results:
         print("\nTreatment comparison results saved to:")
         for file_type, file_path in treatment_comparison_files.items():
             if isinstance(file_path, list):

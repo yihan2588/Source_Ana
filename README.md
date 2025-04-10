@@ -12,7 +12,7 @@ The EEG Slow Wave Analysis Tool processes CSV files containing EEG data, extract
    - Processes EEG data from a directory structure with subjects, nights, and protocols
    - Uses a Subject_Condition JSON file to map subjects to treatment groups (Active/SHAM)
    - Allows selection of specific subjects and nights to process
-   - Organizes data by protocol and stage (pre, early, late, post)
+   - Organizes data by protocol and stage (pre, early, late, post) or (pre, stim, post)
 
 2. **Slow Wave Analysis**
    - Analyzes individual slow wave CSV files to extract:
@@ -124,7 +124,11 @@ Example of creating this file using a text editor:
 5. Save the file as "subject_condition.json"
 ```
 
-CSV files should follow the naming convention: `*proto#*_(pre|early|late|post)-stim*.csv`
+CSV files should follow the naming convention: 
+- Four-stage scheme: `*proto#*_(pre|early|late|post)-stim*.csv`
+- Three-stage scheme: `*proto#*_(pre|stim|post)*.csv` or `*proto#*_(pre|stim|post)-stim*.csv`
+
+The tool automatically detects which stage scheme is being used based on the file names.
 
 ## CSV File Format
 

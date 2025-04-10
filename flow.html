@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEG Analysis Pipeline Flowchart</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+        }
+        .flowchart {
+            width: 100%;
+            overflow-x: auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 900px;
+        }
+        .row {
+            display: flex;
+            justify-content: center;
+            margin: 10px 0;
+            width: 100%;
+        }
+        .box {
+            border: 2px solid #000;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 0 10px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s;
+            min-height: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-size: 14px;
+        }
+        .process {
+            background-color: #D6EAF8;
+            border-color: #2E86C1;
+        }
+        .decision {
+            background-color: #FCF3CF;
+            border-color: #F1C40F;
+            transform: rotate(0deg);
+        }
+        .input {
+            background-color: #D5F5E3;
+            border-color: #27AE60;
+            width: 200px;
+        }
+        .output {
+            background-color: #FADBD8;
+            border-color: #E74C3C;
+        }
+        .module {
+            background-color: #E8DAEF;
+            border-color: #8E44AD;
+            width: 200px;
+        }
+        .arrow {
+            position: relative;
+            width: 2px;
+            background-color: #000;
+            margin: 0 auto;
+            height: 20px;
+        }
+        .arrow:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: -5px;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid #000;
+        }
+        .h-arrow {
+            height: 2px;
+            width: 100px;
+            background-color: #000;
+            position: relative;
+            margin: auto 0;
+        }
+        .h-arrow:after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -5px;
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-left: 8px solid #000;
+        }
+        .section-title {
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            width: 100%;
+            text-align: center;
+            background-color: #ddd;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .box:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        .tooltip {
+            visibility: hidden;
+            width: 250px;
+            background-color: #555;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 100;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+        }
+        .box:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .module-label {
+            font-style: italic;
+            font-size: 11px;
+            color: #555;
+            margin-top: 5px;
+        }
+        .parallel {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .parallel-item {
+            margin: 10px;
+            min-width: 180px;
+        }
+        @media (max-width: 600px) {
+            .box {
+                padding: 5px;
+                font-size: 12px;
+                min-height: 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="flowchart">
+        <div class="container">
+            <!-- Data Input & Validation -->
+            <div class="section-title">Data Input &amp; Validation</div>
+            
+            <div class="row">
+                <div class="box input">
+                    User Input
+                    <div class="tooltip">
+                        <strong>Input:</strong> User enters data directory path, selects subjects &amp; nights.<br>
+                        <strong>Location:</strong> Not yet referencing files, purely interactive console input.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process">
+                    Validate Data Directory
+                    <div class="module-label">main.py</div>
+                    <div class="tooltip">
+                        <strong>Checks:</strong><br>&bull; Confirm "EEG_data" subdirectory<br>&bull; Confirm "Subject_Condition.json"<br>
+                        <strong>Input:</strong> OS path to user-specified directory.<br>
+                        <strong>Output:</strong> Boolean success or exits on error.<br>
+                        <strong>Working Dir:</strong> Verifies presence of subdirs/files in chosen data folder.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process" style="width: 250px;">
+                    Read Subject-Condition Mapping
+                    <div class="module-label">utils.py</div>
+                    <div class="tooltip">
+                        <strong>Input:</strong> "Subject_Condition.json" within the data directory.<br>
+                        <strong>Output:</strong> Dictionary: { 'Subject_001': 'Active', ... }.<br>
+                        <strong>Working Dir:</strong> Reads from data directory's JSON file.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process" style="width: 280px;">
+                    Scan Available Subjects &amp; Nights
+                    <div class="module-label">utils.py</div>
+                    <div class="tooltip">
+                        <strong>Input:</strong> The "EEG_data" path in user directory.<br>
+                        <strong>Output:</strong> Lists of subject folders &amp; night folders (e.g. "Subject_001","Night1").<br>
+                        <strong>Working Dir:</strong> Traverses /EEG_data/ to find directories.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Data Processing -->
+            <div class="section-title">Data Processing</div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process" style="width: 300px;">
+                    process_eeg_data_directory()
+                    <div class="module-label">analysis.py</div>
+                    <div class="tooltip">
+                        <strong>Input:</strong><br>&bull; EEG_data path<br>&bull; Subject condition mapping<br>&bull; Lists of selected subjects &amp; nights<br>
+                        <strong>Output:</strong> A nested dictionary of results by {Group, Protocol, Stage}.<br>
+                        <strong>Working Dir:</strong> Recursively scans "Subject_xxx/Night_y/Output/SourceRecon" CSV files in /EEG_data/...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process">
+                    For each subject &amp; night
+                    <div class="tooltip">
+                        Loop step. Inputs are subject and night directories. No separate function, just iteration.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process" style="width: 250px;">
+                    process_directory()
+                    <div class="module-label">analysis.py</div>
+                    <div class="tooltip">
+                        <strong>Input:</strong> Path to folder containing CSV files (e.g. /Output/SourceRecon).<br>
+                        <strong>Output:</strong> { protocol: { stage: [ waveResult, ... ] } } structure.<br>
+                        <strong>Working Dir:</strong> Uses the CSV data in that subdirectory.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process">
+                    For each CSV file
+                    <div class="tooltip">
+                        Another loop. Each CSV file is read for wave analysis.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process" style="width: 250px;">
+                    analyze_slow_wave()
+                    <div class="module-label">analysis.py</div>
+                    <div class="tooltip">
+                        <strong>Input:</strong> Pandas DataFrame from CSV + wave name.<br>
+                        <strong>Output:</strong><br>&bull; wave_name, involvement stats (percentage, count), origins DataFrame, threshold, etc.<br>
+                        <strong>Working Dir:</strong> Data is read from in-memory DataFrame, not direct file access here.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process" style="width: 250px;">
+                    validate_wave_result()
+                    <div class="module-label">analysis.py</div>
+                    <div class="tooltip">
+                        <strong>Input:</strong> wave result dict + optional CSV file path.<br>
+                        <strong>Output:</strong> Logging to console, optional .log file next to CSV.<br>
+                        <strong>Working Dir:</strong> Writes .log to same folder as CSV file if path is given.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box output" style="width: 350px;">
+                    results_by_treatment_group
+                    <div class="tooltip">
+                        <strong>Structure:</strong> { "Active" or "SHAM" : { "proto1": { "pre":[...], "early":[...], ...}, ... } }<br>
+                        <strong>Location:</strong> In-memory Python object, eventually passed to next steps.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Analysis & Stats -->
+            <div class="section-title">Analysis &amp; Statistics</div>
+            
+            <div class="arrow"></div>
+            
+            <div class="parallel">
+                <div class="parallel-item">
+                    <div class="box process">
+                        analyze_protocol_results()
+                        <div class="module-label">analysis.py</div>
+                        <div class="tooltip">
+                            <strong>Input:</strong> { "pre": [...], "early": [...], ... } from one protocol.<br>
+                            <strong>Output:</strong> Stats: involvement means, origin distribution, plus p-values.<br>
+                            <strong>Working Dir:</strong> No direct file read/write, purely in-memory data.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="parallel-item">
+                    <div class="box process">
+                        analyze_overall_treatment_comparison()
+                        <div class="module-label">analysis.py</div>
+                        <div class="tooltip">
+                            <strong>Input:</strong> results_by_treatment_group.<br>
+                            <strong>Output:</strong> Single aggregated dataset per group, ignoring protocol splits.<br>
+                            <strong>Reduces Protocols:</strong> Collapses all protocols into one big group dataset.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="parallel">
+                <div class="parallel-item">
+                    <div class="box process">
+                        analyze_proto_specific_comparison()
+                        <div class="module-label">analysis.py</div>
+                        <div class="tooltip">
+                            <strong>Input:</strong> results_by_treatment_group by protocol.<br>
+                            <strong>Output:</strong> For each protocol, compares Active vs. SHAM stats &amp; tests.<br>
+                            <strong>Working Dir:</strong> No direct file read/write, purely in-memory data.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="parallel-item">
+                    <div class="box process">
+                        analyze_within_group_stage_comparison()
+                        <div class="module-label">analysis.py</div>
+                        <div class="tooltip">
+                            <strong>Input:</strong> Collated wave data by group, merges protocol data if needed.<br>
+                            <strong>Output:</strong> Statistics comparing pre/early/late/post within each group.<br>
+                            <strong>Working Dir:</strong> In-memory only.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="parallel-item">
+                    <div class="box module">
+                        Statistical Tests
+                        <div class="module-label">stats_utils.py</div>
+                        <div class="tooltip">
+                            <strong>Functions:</strong><br>&bull; perform_involvement_tests(...)<br>&bull; perform_chi_square_or_fisher_test(...)<br>&bull; perform_origin_distribution_tests(...)<br>
+                            <strong>Input:</strong> numeric arrays or contingency tables.<br>
+                            <strong>Output:</strong> test stats, p-values, significance flags.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Output & Visualization -->
+            <div class="section-title">Output &amp; Visualization</div>
+            
+            <div class="arrow"></div>
+            
+            <div class="parallel">
+                <div class="parallel-item">
+                    <div class="box process">
+                        visualize_*() functions
+                        <div class="module-label">visualize.py</div>
+                        <div class="tooltip">
+                            <strong>Input:</strong> aggregated wave-level stats, or single wave data.<br>
+                            <strong>Output:</strong> PNG bar charts, time series, origin distribution plots.<br>
+                            <strong>Working Dir:</strong> Saves images to "Source_Ana" or "results" folders.
+                        </div>
+                    </div>
+                    <div class="arrow"></div>
+                    <div class="box output">
+                        PNG Charts/Plots
+                        <div class="tooltip">
+                            <strong>Location:</strong> Usually in a "results" or "Source_Ana" directory relative to user's data folder.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="parallel-item">
+                    <div class="box process">
+                        save_results_*() functions
+                        <div class="module-label">save_results.py</div>
+                        <div class="tooltip">
+                            <strong>Input:</strong> final dictionaries from the various analyses.<br>
+                            <strong>Output:</strong> Writes CSVs capturing involvement means, region distributions, test results.<br>
+                            <strong>Working Dir:</strong> Typically writes to "Source_Ana" or "results" folder near data directory.
+                        </div>
+                    </div>
+                    <div class="arrow"></div>
+                    <div class="box output">
+                        CSV Result Files
+                        <div class="tooltip">
+                            <strong>Location:</strong> In the designated output directory (e.g. /Source_Ana or /results).
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="row">
+                <div class="box process">
+                    Print Final Summaries &amp; Exit
+                    <div class="module-label">main.py</div>
+                    <div class="tooltip">
+                        <strong>Final Step:</strong><br>Displays stats summary in console and concludes program flow.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

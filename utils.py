@@ -21,7 +21,7 @@ def compute_master_region_list(results_by_protocol):
     from collections import Counter
     region_frequency = Counter()
     for protocol in results_by_protocol:
-        for stage in ['pre', 'early', 'late', 'post']:
+        for stage in results_by_protocol[protocol].keys():
             for result in results_by_protocol[protocol][stage]:
                 if 'origins' in result and not result['origins'].empty:
                     regions = result['origins']['region'].tolist()
@@ -62,9 +62,17 @@ def collect_wave_level_data(results_by_protocol):
     """
     Collect wave-level data across all protocols (for single-group usage).
     """
-    consolidated_data = {'pre': [], 'early': [], 'late': [], 'post': []}
+    # Get all available stages across all protocols
+    all_stages = set()
     for protocol in results_by_protocol:
-        for stage in ['pre', 'early', 'late', 'post']:
+        all_stages.update(results_by_protocol[protocol].keys())
+    
+    # Initialize consolidated data with all found stages
+    consolidated_data = {stage: [] for stage in all_stages}
+    
+    # Collect data for each stage
+    for protocol in results_by_protocol:
+        for stage in all_stages:
             if stage in results_by_protocol[protocol]:
                 consolidated_data[stage].extend(results_by_protocol[protocol][stage])
     return consolidated_data
@@ -74,11 +82,20 @@ def collect_data_by_treatment_group(results_by_treatment_group):
     """
     Collect wave-level data across all protocols for each treatment group.
     """
+    # Get all available stages across all groups and protocols
+    all_stages = set()
+    for group in results_by_treatment_group:
+        for protocol in results_by_treatment_group[group]:
+            all_stages.update(results_by_treatment_group[group][protocol].keys())
+    
+    # Initialize consolidated data with all found stages
     consolidated_data = {}
     for group in results_by_treatment_group:
-        consolidated_data[group] = {'pre': [], 'early': [], 'late': [], 'post': []}
+        consolidated_data[group] = {stage: [] for stage in all_stages}
+        
+        # Collect data for each stage
         for protocol in results_by_treatment_group[group]:
-            for stage in ['pre', 'early', 'late', 'post']:
+            for stage in all_stages:
                 if stage in results_by_treatment_group[group][protocol]:
                     consolidated_data[group][stage].extend(results_by_treatment_group[group][protocol][stage])
     return consolidated_data

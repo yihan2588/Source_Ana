@@ -241,8 +241,12 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
                 # Merge the subject results into the treatment group results
                 for protocol in subject_results:
                     if protocol not in results_by_treatment_group[group]:
-                        results_by_treatment_group[group][protocol] = {'pre': [], 'early': [], 'late': [], 'post': []}
-                    for stage in ['pre', 'early', 'late', 'post']:
+                        results_by_treatment_group[group][protocol] = {}
+                    
+                    # Merge all stages in the subject results
+                    for stage in subject_results[protocol]:
+                        if stage not in results_by_treatment_group[group][protocol]:
+                            results_by_treatment_group[group][protocol][stage] = []
                         results_by_treatment_group[group][protocol][stage].extend(subject_results[protocol][stage])
                 
                 # Update file counts
@@ -283,7 +287,7 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
         return None
 
     protocol_pattern = r'(proto\d+)'
-    stage_pattern = r'(pre|early|late|post)-stim'
+    stage_pattern = r'(pre|early|late|post|stim)(?:-stim)?'
 
     results_by_protocol = {}
     total_files = len(csv_files)
@@ -298,7 +302,11 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
             protocol = protocol_match.group(1).lower()  # ensure consistent case (proto1, proto2, etc.)
             stage = stage_match.group(1).lower()
             if protocol not in results_by_protocol:
-                results_by_protocol[protocol] = {'pre': [], 'early': [], 'late': [], 'post': []}
+                results_by_protocol[protocol] = {}
+            
+            # Make sure the stage exists in the protocol's results
+            if stage not in results_by_protocol[protocol]:
+                results_by_protocol[protocol][stage] = []
 
             try:
                 df = pd.read_csv(csv_file)
@@ -427,145 +435,6 @@ def analyze_protocol_results(protocol_name, protocol_results, master_region_list
     }
 
 
-def analyze_treatment_groups(results_by_treatment_group, master_region_list):
-    """
-    Analyze and compare results between treatment groups (Active vs. SHAM).
-    Returns a dictionary with treatment comparison results.
-    """
-    print("\n=== Treatment Group Comparison Analysis ===")
-
-    # Collect data by treatment group
-    treatment_data = collect_data_by_treatment_group(results_by_treatment_group)
-
-    # Calculate involvement statistics
-    treatment_involvement_stats = {}
-    treatment_involvement_data = {}
-
-    for group in treatment_data:
-        involvement_by_stage = {
-            stage: [res['involvement_percentage'] for res in treatment_data[group][stage]]
-            for stage in treatment_data[group]
-        }
-        stats_by_stage = {
-            stage: calculate_involvement_statistics(involvement_by_stage[stage])
-            for stage in involvement_by_stage
-        }
-        treatment_involvement_stats[group] = stats_by_stage
-        treatment_involvement_data[group] = involvement_by_stage
-
-    print("\nInvolvement Statistics by Treatment Group:")
-    for group in treatment_involvement_stats:
-        print(f"\n{group} Group:")
-        for stage, stats in treatment_involvement_stats[group].items():
-            print(f"  {stage.capitalize()}: {stats['mean']:.1f}% ± {stats['std']:.1f}% (n={stats['count']})")
-
-    # Perform statistical tests comparing treatment groups for each stage
-    treatment_comparison_tests = []
-    stages = ['pre', 'early', 'late', 'post']
-    if 'Active' in treatment_involvement_data and 'SHAM' in treatment_involvement_data:
-        for stage in stages:
-            active_data = treatment_involvement_data.get('Active', {}).get(stage, [])
-            sham_data = treatment_involvement_data.get('SHAM', {}).get(stage, [])
-            if active_data and sham_data:
-                try:
-                    u_stat, p_val = scipy_stats.mannwhitneyu(active_data, sham_data, alternative='two-sided')
-                    treatment_comparison_tests.append({
-                        'Test': 'Mann-Whitney U',
-                        'Metric': f'Involvement: Active vs SHAM ({stage})',
-                        'Stage': stage,
-                        'Statistic': u_stat,
-                        'P_Value': p_val,
-                        'Significant': p_val < 0.05
-                    })
-                    print(f"\nMann-Whitney U Test for {stage} stage (Active vs SHAM): U={u_stat:.2f}, p={p_val:.4f}")
-                    if p_val < 0.05:
-                        print(f"Significant difference detected in {stage} involvement between Active and SHAM groups.")
-                except Exception as e:
-                    print(f"Error performing statistical test for {stage} stage: {str(e)}")
-
-    # Calculate origin statistics
-    treatment_origin_data = {}
-    for group in treatment_data:
-        origin_by_stage = {}
-        for stage in treatment_data[group]:
-            stage_results = treatment_data[group][stage]
-            total_waves = len(stage_results)
-            region_counts = calculate_origin_statistics(stage_results, stage, total_waves)
-            origin_by_stage[stage] = {
-                'region_counts': region_counts,
-                'total_waves': total_waves
-            }
-        treatment_origin_data[group] = origin_by_stage
-
-    print("\nOrigin Distribution by Treatment Group:")
-    for group in treatment_origin_data:
-        print(f"\n{group} Group:")
-        for stage, data_dict in treatment_origin_data[group].items():
-            rc = data_dict['region_counts']
-            tw = data_dict['total_waves']
-            if rc and tw > 0:
-                print(f"  {stage.capitalize()} (n={tw} waves):")
-                ordered_regions = [r for r in master_region_list if r in rc]
-                displayed = 0
-                for region in ordered_regions:
-                    if displayed >= 5:
-                        break
-                    count = rc[region]
-                    percentage = (count / tw) * 100
-                    print(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
-                    displayed += 1
-            else:
-                print(f"  {stage.capitalize()}: No origins detected")
-
-    # Perform statistical tests on origin distribution between treatment groups
-    origin_comparison_tests = []
-    if 'Active' in treatment_origin_data and 'SHAM' in treatment_origin_data:
-        for stage in stages:
-            active_stage = treatment_origin_data['Active'].get(stage, {})
-            sham_stage = treatment_origin_data['SHAM'].get(stage, {})
-            if active_stage and sham_stage:
-                active_origins = active_stage['region_counts']
-                sham_origins = sham_stage['region_counts']
-                # Create 2-row contingency table for top or all regions
-                all_regions = set(active_origins.keys()) | set(sham_origins.keys())
-                # Build the table
-                if all_regions:
-                    contingency_table = []
-                    for region in all_regions:
-                        # We'll fill these after we pivot to shape (2 x N)
-                        pass
-                    # Actually, let's do separate arrays for "active" and "sham"
-                    # then pass them to the test function.
-                    # Filter out empty?
-                    active_counts = [active_origins.get(r, 0) for r in all_regions]
-                    sham_counts = [sham_origins.get(r, 0) for r in all_regions]
-                    contingency_table = np.array([active_counts, sham_counts])
-
-                    # Perform the test
-                    test_result = perform_chi_square_or_fisher_test(contingency_table)
-                    if test_result:
-                        test_result['Metric'] = f'Origin Distribution: Active vs SHAM ({stage})'
-                        test_result['Stage'] = stage
-                        origin_comparison_tests.append(test_result)
-
-                        # Print results
-                        if 'DF' in test_result:
-                            print(f"\n{test_result['Test']} for {stage} origin distribution (Active vs SHAM): "
-                                  f"χ²={test_result['Statistic']:.2f}, df={test_result['DF']}, p={test_result['P_Value']:.4f}")
-                        else:
-                            print(f"\n{test_result['Test']} for {stage} origin distribution (Active vs SHAM): "
-                                  f"p={test_result['P_Value']:.4f}")
-                        if test_result['Significant']:
-                            print(f"Significant difference detected in {stage} origin distribution between Active and SHAM groups.")
-
-    return {
-        'treatment_involvement_data': treatment_involvement_data,
-        'treatment_involvement_stats': treatment_involvement_stats,
-        'treatment_origin_data': treatment_origin_data,
-        'treatment_comparison_tests': treatment_comparison_tests + origin_comparison_tests,
-        'master_region_list': master_region_list
-    }
-
 
 def analyze_overall_treatment_comparison(results_by_treatment_group, master_region_list, min_occurrence_threshold=3):
     """
@@ -573,19 +442,34 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
     """
     print("\n=== Overall Treatment Group Comparison (Collapsing Subjects, Nights, and Protos) ===")
 
+    # Collect all possible stages across all protocols and groups
+    all_stages = set()
+    for group in results_by_treatment_group:
+        for protocol in results_by_treatment_group[group]:
+            all_stages.update(results_by_treatment_group[group][protocol].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
+    
     # Collect all waves for each treatment group across all protocols
     all_waves_by_group = {'Active': {}, 'SHAM': {}}
     for group in results_by_treatment_group:
-        all_waves_by_group[group] = {'pre': [], 'early': [], 'late': [], 'post': []}
+        all_waves_by_group[group] = {stage: [] for stage in stages}
         for protocol in results_by_treatment_group[group]:
-            for stage in ['pre', 'early', 'late', 'post']:
-                all_waves_by_group[group][stage].extend(results_by_treatment_group[group][protocol][stage])
+            for stage in stages:
+                if stage in results_by_treatment_group[group][protocol]:
+                    all_waves_by_group[group][stage].extend(results_by_treatment_group[group][protocol][stage])
 
     # Calculate involvement
     involvement_stats = {}
     involvement_data = {}
     groups = list(all_waves_by_group.keys())
-    stages = ['pre', 'early', 'late', 'post']
+    # stages already defined above with detected stages
 
     for group in groups:
         involvement_by_stage = {
@@ -715,9 +599,22 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
     all_protocols = set()
     for group in results_by_treatment_group:
         all_protocols.update(results_by_treatment_group[group].keys())
+    
+    # Collect all possible stages across all protocols and groups
+    all_stages = set()
+    for group in results_by_treatment_group:
+        for protocol in results_by_treatment_group[group]:
+            all_stages.update(results_by_treatment_group[group][protocol].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
 
     proto_specific_results = {}
-    stages = ['pre', 'early', 'late', 'post']
     groups = list(results_by_treatment_group.keys())
 
     for protocol in sorted(all_protocols):
@@ -862,13 +759,28 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
     """
     print("\n=== Within-Group Stage Comparison ===")
 
+    # Collect all possible stages across all protocols and groups
+    all_stages = set()
+    for group in results_by_treatment_group:
+        for protocol in results_by_treatment_group[group]:
+            all_stages.update(results_by_treatment_group[group][protocol].keys())
+    
+    # Determine standard stage order if possible
+    if all_stages == {'pre', 'early', 'late', 'post'}:
+        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
+    elif all_stages == {'pre', 'stim', 'post'}:
+        stages = ['pre', 'stim', 'post']  # 3-stage scheme
+    else:
+        stages = sorted(all_stages)  # fallback to alphabetical order
+
     # Collect all waves for each treatment group across all protocols
     all_waves_by_group = {}
     for group in results_by_treatment_group:
-        all_waves_by_group[group] = {'pre': [], 'early': [], 'late': [], 'post': []}
+        all_waves_by_group[group] = {stage: [] for stage in stages}
         for protocol in results_by_treatment_group[group]:
-            for stage in ['pre', 'early', 'late', 'post']:
-                all_waves_by_group[group][stage].extend(results_by_treatment_group[group][protocol][stage])
+            for stage in stages:
+                if stage in results_by_treatment_group[group][protocol]:
+                    all_waves_by_group[group][stage].extend(results_by_treatment_group[group][protocol][stage])
 
     within_group_results = {}
     for group in all_waves_by_group:
@@ -876,7 +788,7 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
         # Calculate involvement data
         involvement_data = {
             stage: [res['involvement_percentage'] for res in all_waves_by_group[group][stage]]
-            for stage in ['pre', 'early', 'late', 'post']
+            for stage in stages
         }
         involvement_stats = {
             stage: calculate_involvement_statistics(involvement_data[stage])
@@ -908,7 +820,7 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
 
         # Calculate origin data
         origin_data = {}
-        for stage in ['pre', 'early', 'late', 'post']:
+        for stage in stages:
             stage_results = all_waves_by_group[group][stage]
             total_waves = len(stage_results)
             region_counts = calculate_origin_statistics(stage_results, stage, total_waves)
