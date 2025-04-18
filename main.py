@@ -107,32 +107,44 @@ def main():
     if results_by_treatment_group is None:
         return
     
-    # Flatten the results for protocol-level analysis
+    # Flatten the results for protocol-level analysis (aggregating across groups and subjects)
     results_by_protocol = {}
-    
-    # Collect all possible stages across all protocols and groups
+    all_protocols = set()
     all_stages = set()
-    for group in results_by_treatment_group:
-        for protocol in results_by_treatment_group[group]:
-            all_stages.update(results_by_treatment_group[group][protocol].keys())
-    
-    # Create the flattened protocol results with all available stages
-    for group in results_by_treatment_group:
-        for protocol in results_by_treatment_group[group]:
-            if protocol not in results_by_protocol:
-                results_by_protocol[protocol] = {stage: [] for stage in all_stages}
-            
-            # For each stage that exists in this group's protocol, extend the results
-            for stage in results_by_treatment_group[group][protocol]:
-                results_by_protocol[protocol][stage].extend(results_by_treatment_group[group][protocol][stage])
 
-    print("\n=== Overall Data Summary ===")
+    # First, identify all protocols and stages present in the data
+    for group in results_by_treatment_group:
+        for subject in results_by_treatment_group[group]:
+            subject_protocols = results_by_treatment_group[group][subject].keys()
+            all_protocols.update(subject_protocols)
+            for protocol in subject_protocols:
+                protocol_stages = results_by_treatment_group[group][subject][protocol].keys()
+                all_stages.update(protocol_stages)
+
+    # Initialize the flattened structure
+    for protocol in all_protocols:
+        results_by_protocol[protocol] = {stage: [] for stage in all_stages}
+
+    # Now, populate the flattened structure by iterating through the nested dict
+    for group in results_by_treatment_group:
+        for subject in results_by_treatment_group[group]:
+            for protocol in results_by_treatment_group[group][subject]:
+                for stage in results_by_treatment_group[group][subject][protocol]:
+                    # Ensure the protocol and stage exist in the flattened structure
+                    if protocol in results_by_protocol and stage in results_by_protocol[protocol]:
+                        # Extend the list with wave result dictionaries
+                        results_by_protocol[protocol][stage].extend(results_by_treatment_group[group][subject][protocol][stage])
+
+
+    print("\n=== Overall Data Summary (Waves per Subject/Proto/Stage) ===")
     for group in results_by_treatment_group:
         print(f"\nTreatment Group: {group}")
-        for protocol, stages in results_by_treatment_group[group].items():
-            print(f"  {protocol}:")
-            for stage, results in stages.items():
-                print(f"    {stage}: {len(results)} waves")
+        for subject, subject_data in results_by_treatment_group[group].items():
+             print(f"  Subject: {subject}")
+             for protocol, proto_data in subject_data.items():
+                 print(f"    {protocol}:")
+                 for stage, results in proto_data.items():
+                     print(f"      {stage}: {len(results)} waves")
 
     # Compute the master region list once, from the protocol-level data
     master_region_list = compute_master_region_list(results_by_protocol)
@@ -170,14 +182,16 @@ def main():
         visualize_within_group_stage_comparison(within_group_results, output_dir="results", source_dir=source_dir)
 
         # Save all CSV results from the new analyses
-        # Legacy save_treatment_comparison_results function will use the overall_comparison_results instead
-        treatment_comparison_files = save_treatment_comparison_results(overall_comparison_results, output_dir="results", source_dir=source_dir)
+        # Note: save_treatment_comparison_results is removed as it's redundant with overall
         overall_comparison_files = save_overall_treatment_comparison_results(overall_comparison_results, output_dir="results", source_dir=source_dir)
         proto_specific_files = save_proto_specific_comparison_results(proto_specific_results, output_dir="results", source_dir=source_dir)
         within_group_files = save_within_group_stage_comparison_results(within_group_results, output_dir="results", source_dir=source_dir)
     else:
-        treatment_comparison_files = {}
-        overall_comparison_results = None
+        # Initialize file dictionaries even if no comparison is done
+        overall_comparison_files = {}
+        proto_specific_files = {}
+        within_group_files = {}
+        overall_comparison_results = None # Keep this for the print logic below
         proto_specific_results = None
         within_group_results = None
 
@@ -199,16 +213,8 @@ def main():
         elif file_path is not None:
             print(f" - {file_path}")
 
-    if overall_comparison_results:
-        print("\nTreatment comparison results saved to:")
-        for file_type, file_path in treatment_comparison_files.items():
-            if isinstance(file_path, list):
-                for path in file_path:
-                    if path is not None:
-                        print(f" - {path}")
-            elif file_path is not None:
-                print(f" - {file_path}")
-
+    # Print paths for the comparison results if they were generated
+    if overall_comparison_results: # Check if comparisons were run
         print("\nOverall treatment comparison results saved to:")
         for file_type, file_path in overall_comparison_files.items():
             if isinstance(file_path, list):

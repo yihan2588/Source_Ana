@@ -1,53 +1,126 @@
 import numpy as np
 from scipy import stats as scipy_stats
+from scipy.stats import friedmanchisquare, wilcoxon
 from statsmodels.stats.multitest import multipletests
+import itertools
 
 
-def perform_involvement_tests(involvement_data):
+def perform_friedman_test(*args):
     """
-    Perform statistical tests (Kruskal-Wallis and post-hoc Mann-Whitney U)
-    on involvement data across stages.
-    """
-    stats_results = []
-    valid_stages = [stage for stage in involvement_data.keys() if involvement_data[stage]]
-    if len(valid_stages) >= 2:
-        groups = [involvement_data[st] for st in valid_stages]
-        try:
-            statistic, p_value = scipy_stats.kruskal(*groups)
-            stats_results.append({
-                'Test': 'Kruskal-Wallis',
-                'Metric': 'Involvement',
-                'Statistic': statistic,
-                'P_Value': p_value,
-                'Significant': p_value < 0.05
-            })
-            if p_value < 0.05:
-                # post-hoc
-                pairwise_results = []
-                for i, stage1 in enumerate(valid_stages):
-                    for stage2 in valid_stages[i+1:]:
-                        if involvement_data[stage1] and involvement_data[stage2]:
-                            u_stat, p_val = scipy_stats.mannwhitneyu(
-                                involvement_data[stage1],
-                                involvement_data[stage2],
-                                alternative='two-sided'
-                            )
-                            pairwise_results.append((stage1, stage2, u_stat, p_val))
-                if pairwise_results:
-                    pvals = [r[3] for r in pairwise_results]
-                    reject, pvals_corrected, _, _ = multipletests(pvals, method='fdr_bh')
-                    for i, (st1, st2, u_stat, _) in enumerate(pairwise_results):
-                        stats_results.append({
-                            'Test': 'Mann-Whitney U',
-                            'Metric': f'Involvement: {st1} vs {st2}',
-                            'Statistic': u_stat,
-                            'P_Value': pvals_corrected[i],
-                            'Significant': reject[i]
-                        })
-        except Exception as e:
-            print(f"Error performing statistical test for involvement: {str(e)}")
+    Perform the Friedman test for repeated measures.
 
-    return stats_results
+    Args:
+        *args: Multiple lists or arrays, each representing measurements for a
+               different condition/stage, with subjects matched across lists.
+               Example: perform_friedman_test(stage1_scores, stage2_scores, stage3_scores)
+               where stage1_scores[i] corresponds to the same subject as stage2_scores[i].
+
+    Returns:
+        A dictionary containing the test results or None if the test cannot be performed.
+    """
+    # Ensure all groups have the same number of subjects
+    if not args:
+        print("Error: No data provided for Friedman test.")
+        return None
+    n_subjects = len(args[0])
+    if not all(len(arg) == n_subjects for arg in args):
+        print("Error: All groups must have the same number of subjects for Friedman test.")
+        # Consider handling missing data more gracefully if needed (e.g., imputation or subject removal)
+        return None
+    if n_subjects < 2 or len(args) < 2:
+        print("Error: Friedman test requires at least 2 subjects and 2 conditions.")
+        return None
+
+    try:
+        statistic, p_value = friedmanchisquare(*args)
+        return {
+            'Test': 'Friedman Test',
+            'Metric': 'Involvement',
+            'Statistic': statistic,
+            'P_Value': p_value,
+            'Significant': p_value < 0.05
+        }
+    except Exception as e:
+        print(f"Error performing Friedman test for involvement: {str(e)}")
+        return None
+
+
+def perform_wilcoxon_posthoc(paired_data, stage_names):
+    """
+    Perform post-hoc Wilcoxon signed-rank tests with FDR correction.
+
+    Args:
+        paired_data: A list of lists/arrays, where each inner list contains the
+                     measurements for one stage, ordered by subject.
+                     Example: [[subj1_pre, subj2_pre, ...], [subj1_post, subj2_post, ...]]
+        stage_names: A list of names corresponding to the stages in paired_data.
+                     Example: ['pre', 'post']
+
+    Returns:
+        A list of dictionaries, each containing results for a pairwise comparison.
+    """
+    if len(paired_data) != len(stage_names) or len(paired_data) < 2:
+        print("Error: Need at least two stages with corresponding names for Wilcoxon post-hoc.")
+        return []
+
+    pairwise_results_raw = []
+    comparisons = list(itertools.combinations(range(len(stage_names)), 2))
+
+    for i, j in comparisons:
+        stage1_name = stage_names[i]
+        stage2_name = stage_names[j]
+        data1 = paired_data[i]
+        data2 = paired_data[j]
+
+        # Ensure equal length and handle potential all-zero differences
+        if len(data1) != len(data2):
+            print(f"Warning: Skipping Wilcoxon for {stage1_name} vs {stage2_name} due to unequal lengths.")
+            continue
+        diff = np.array(data1) - np.array(data2)
+        if np.all(diff == 0):
+             # Wilcoxon raises error if all differences are zero
+             print(f"Skipping Wilcoxon for {stage1_name} vs {stage2_name}: all differences are zero.")
+             # Assign non-significant p-value or handle as needed
+             stat = np.nan
+             p_val = 1.0
+        else:
+            try:
+                stat, p_val = wilcoxon(data1, data2, alternative='two-sided', zero_method='pratt') # 'pratt' handles zeros
+            except ValueError as e:
+                 # Handle cases like fewer than required data points after removing zeros/ties
+                 print(f"Warning: Wilcoxon failed for {stage1_name} vs {stage2_name}: {e}. Assigning p=1.0")
+                 stat = np.nan
+                 p_val = 1.0
+            except Exception as e:
+                print(f"Error performing Wilcoxon for {stage1_name} vs {stage2_name}: {str(e)}")
+                continue # Skip this comparison
+
+        pairwise_results_raw.append({
+            'stage1': stage1_name,
+            'stage2': stage2_name,
+            'statistic': stat,
+            'p_value_raw': p_val
+        })
+
+    if not pairwise_results_raw:
+        return []
+
+    # Apply FDR correction
+    pvals_raw = [res['p_value_raw'] for res in pairwise_results_raw]
+    reject, pvals_corrected, _, _ = multipletests(pvals_raw, method='fdr_bh', alpha=0.05)
+
+    # Format final results
+    final_results = []
+    for i, raw_res in enumerate(pairwise_results_raw):
+        final_results.append({
+            'Test': 'Wilcoxon Signed-Rank',
+            'Metric': f'Involvement: {raw_res["stage1"]} vs {raw_res["stage2"]}',
+            'Statistic': raw_res['statistic'],
+            'P_Value': pvals_corrected[i],
+            'Significant': reject[i]
+        })
+
+    return final_results
 
 
 def perform_chi_square_or_fisher_test(contingency_table):

@@ -1,9 +1,0 @@
-Test,Metric,Statistic,P_Value,Significant,Protocol,DF
-Kruskal-Wallis,Involvement,0.862250559320044,0.649777501770898,False,proto3,
-Chi-Square (w/ correction or G-test fallback),Origin Distribution,3.025533470484885,0.9999704026344362,False,proto3,18.0
-Kruskal-Wallis,Involvement,0.15650183150182784,0.9247323675147346,False,proto2,
-Chi-Square (w/ correction or G-test fallback),Origin Distribution,2.18804973165045,0.9999976767280174,False,proto2,18.0
-Kruskal-Wallis,Involvement,1.0486064607645627,0.5919676858017473,False,proto1,
-Chi-Square,Origin Distribution,3.0677854096623576,0.9999670898598131,False,proto1,18.0
-Kruskal-Wallis,Involvement,1.0009329446064044,0.6062477959380219,False,proto4,
-Chi-Square,Origin Distribution,5.276687422319655,0.9983595592568448,False,proto4,18.0

@@ -13,12 +13,20 @@ def save_statistical_results(analysis_results, output_dir=".", source_dir=None):
         output_dir: Directory to save results (defaults to current directory)
         source_dir: Source directory where data is read from, used to construct output path
     """
-    # If source_dir is provided, create "Source_Ana" in the source directory
+    # Define base output directory structure
+    base_output_dir = "results"
     if source_dir:
-        output_dir = os.path.join(source_dir, "Source_Ana")
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
+
+    # Define specific directories for individual protocol results
+    involvement_dir = os.path.join(base_output_dir, "involvement", "individual_protocol")
+    origin_dir = os.path.join(base_output_dir, "origin", "individual_protocol")
+    stats_dir = os.path.join(base_output_dir, "stats", "individual_protocol")
+    os.makedirs(involvement_dir, exist_ok=True)
+    os.makedirs(origin_dir, exist_ok=True)
+    os.makedirs(stats_dir, exist_ok=True)
     print("\n=== Saving Statistical Results for Individual Protocols ===")
-    os.makedirs(output_dir, exist_ok=True)
-    
+
     # Save involvement statistics
     involvement_stats_data = []
     for protocol, results in analysis_results.items():
@@ -33,7 +41,8 @@ def save_statistical_results(analysis_results, output_dir=".", source_dir=None):
             })
     
     involvement_stats_df = pd.DataFrame(involvement_stats_data)
-    involvement_stats_file = os.path.join(output_dir, "involvement_statistics.csv")
+    # Save to the new individual protocol involvement directory
+    involvement_stats_file = os.path.join(involvement_dir, "all_protocols_involvement_statistics.csv")
     involvement_stats_df.to_csv(involvement_stats_file, index=False)
     print(f"Saved involvement statistics to {involvement_stats_file}")
     
@@ -56,7 +65,8 @@ def save_statistical_results(analysis_results, output_dir=".", source_dir=None):
                 })
         if origin_data:
             origin_df = pd.DataFrame(origin_data)
-            origin_file = os.path.join(output_dir, f"{protocol}_origin_statistics.csv")
+            # Save to the new individual protocol origin directory
+            origin_file = os.path.join(origin_dir, f"{protocol}_origin_statistics.csv")
             origin_df.to_csv(origin_file, index=False)
             origin_files.append(origin_file)
             print(f"Saved origin statistics for {protocol} to {origin_file}")
@@ -78,7 +88,8 @@ def save_statistical_results(analysis_results, output_dir=".", source_dir=None):
     stats_file = None
     if all_test_results:
         stats_df = pd.DataFrame(all_test_results)
-        stats_file = os.path.join(output_dir, "statistical_test_results.csv")
+        # Save to the new individual protocol stats directory
+        stats_file = os.path.join(stats_dir, "all_protocols_statistical_test_results.csv")
         stats_df.to_csv(stats_file, index=False)
         print(f"Saved statistical test results to {stats_file}")
     
@@ -103,11 +114,31 @@ def save_treatment_comparison_results(treatment_comparison_results, output_dir="
     print("\n=== Saving Treatment Comparison Results ===")
     os.makedirs(output_dir, exist_ok=True)
     
+    # Determine which keys are available in the results (handle both naming conventions)
+    involvement_stats_key = 'treatment_involvement_stats'
+    origin_data_key = 'treatment_origin_data'
+    tests_key = 'treatment_comparison_tests'
+    
+    # If using overall_ keys instead (from analyze_overall_treatment_comparison)
+    if 'overall_involvement_stats' in treatment_comparison_results:
+        involvement_stats_key = 'overall_involvement_stats'
+        origin_data_key = 'overall_origin_data'
+        tests_key = 'overall_comparison_tests'
+    
+    # Check if the required key exists
+    if involvement_stats_key not in treatment_comparison_results:
+        print(f"Warning: {involvement_stats_key} not found in treatment comparison results")
+        return {
+            'treatment_involvement_stats': None,
+            'treatment_origin_stats': None,
+            'treatment_comparison_tests': None
+        }
+    
     # Save treatment involvement statistics
-    treatment_involvement_stats = treatment_comparison_results['treatment_involvement_stats']
+    involvement_stats = treatment_comparison_results[involvement_stats_key]
     involvement_data = []
     
-    for group, stats_by_stage in treatment_involvement_stats.items():
+    for group, stats_by_stage in involvement_stats.items():
         for stage, stats in stats_by_stage.items():
             involvement_data.append({
                 'Treatment_Group': group,
@@ -124,23 +155,24 @@ def save_treatment_comparison_results(treatment_comparison_results, output_dir="
     print(f"Saved treatment involvement statistics to {involvement_file}")
     
     # Save treatment origin statistics
-    treatment_origin_data = treatment_comparison_results['treatment_origin_data']
     origin_data = []
-    
-    for group, origin_by_stage in treatment_origin_data.items():
-        for stage, stage_info in origin_by_stage.items():
-            region_counts = stage_info['region_counts']
-            total_waves = stage_info['total_waves']
-            for region, count in region_counts.items():
-                percentage = (count / total_waves * 100) if total_waves > 0 else 0
-                origin_data.append({
-                    'Treatment_Group': group,
-                    'Stage': stage,
-                    'Region': region,
-                    'Count': count,
-                    'Total_Waves': total_waves,
-                    'Percentage': percentage
-                })
+    if origin_data_key in treatment_comparison_results:
+        origin_stats = treatment_comparison_results[origin_data_key]
+        
+        for group, origin_by_stage in origin_stats.items():
+            for stage, stage_info in origin_by_stage.items():
+                region_counts = stage_info['region_counts']
+                total_waves = stage_info['total_waves']
+                for region, count in region_counts.items():
+                    percentage = (count / total_waves * 100) if total_waves > 0 else 0
+                    origin_data.append({
+                        'Treatment_Group': group,
+                        'Stage': stage,
+                        'Region': region,
+                        'Count': count,
+                        'Total_Waves': total_waves,
+                        'Percentage': percentage
+                    })
     
     if origin_data:
         origin_df = pd.DataFrame(origin_data)
@@ -151,7 +183,7 @@ def save_treatment_comparison_results(treatment_comparison_results, output_dir="
         origin_file = None
     
     # Save treatment comparison test results
-    comparison_tests = treatment_comparison_results.get('treatment_comparison_tests', [])
+    comparison_tests = treatment_comparison_results.get(tests_key, [])
     tests_file = None
     
     if comparison_tests:
@@ -175,12 +207,21 @@ def save_overall_treatment_comparison_results(overall_comparison_results, output
         output_dir: Directory to save results (defaults to current directory)
         source_dir: Source directory where data is read from, used to construct output path
     """
-    # If source_dir is provided, create "Source_Ana" in the source directory
+    # Define base output directory structure
+    base_output_dir = "results"
     if source_dir:
-        output_dir = os.path.join(source_dir, "Source_Ana")
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
+
+    # Define specific directories for this comparison type
+    involvement_dir = os.path.join(base_output_dir, "involvement", "overall_comparison")
+    origin_dir = os.path.join(base_output_dir, "origin", "overall_comparison")
+    # Use a general output_dir for tests that might span both metrics
+    tests_dir = os.path.join(base_output_dir, "stats", "overall_comparison")
+    os.makedirs(involvement_dir, exist_ok=True)
+    os.makedirs(origin_dir, exist_ok=True)
+    os.makedirs(tests_dir, exist_ok=True)
     print("\n=== Saving Overall Treatment Comparison Results ===")
-    os.makedirs(output_dir, exist_ok=True)
-    
+
     # Save overall involvement statistics
     involvement_stats = overall_comparison_results['overall_involvement_stats']
     involvement_data = []
@@ -197,7 +238,8 @@ def save_overall_treatment_comparison_results(overall_comparison_results, output
             })
     
     involvement_df = pd.DataFrame(involvement_data)
-    involvement_file = os.path.join(output_dir, "overall_involvement_statistics.csv")
+    # Save to the new involvement directory
+    involvement_file = os.path.join(involvement_dir, "overall_involvement_statistics.csv")
     involvement_df.to_csv(involvement_file, index=False)
     print(f"Saved overall involvement statistics to {involvement_file}")
     
@@ -222,7 +264,8 @@ def save_overall_treatment_comparison_results(overall_comparison_results, output
     
     if origin_list:
         origin_df = pd.DataFrame(origin_list)
-        origin_file = os.path.join(output_dir, "overall_origin_statistics.csv")
+        # Save to the new origin directory
+        origin_file = os.path.join(origin_dir, "overall_origin_statistics.csv")
         origin_df.to_csv(origin_file, index=False)
         print(f"Saved overall origin statistics to {origin_file}")
     else:
@@ -234,7 +277,8 @@ def save_overall_treatment_comparison_results(overall_comparison_results, output
     
     if comparison_tests:
         tests_df = pd.DataFrame(comparison_tests)
-        tests_file = os.path.join(output_dir, "overall_comparison_test_results.csv")
+        # Save to the new tests directory
+        tests_file = os.path.join(tests_dir, "overall_comparison_test_results.csv")
         tests_df.to_csv(tests_file, index=False)
         print(f"Saved overall comparison test results to {tests_file}")
     
@@ -253,12 +297,20 @@ def save_proto_specific_comparison_results(proto_specific_results, output_dir=".
         output_dir: Directory to save results (defaults to current directory)
         source_dir: Source directory where data is read from, used to construct output path
     """
-    # If source_dir is provided, create "Source_Ana" in the source directory
+    # Define base output directory structure
+    base_output_dir = "results"
     if source_dir:
-        output_dir = os.path.join(source_dir, "Source_Ana")
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
+
+    # Define specific directories for this comparison type
+    involvement_dir = os.path.join(base_output_dir, "involvement", "proto_specific_comparison")
+    origin_dir = os.path.join(base_output_dir, "origin", "proto_specific_comparison")
+    tests_dir = os.path.join(base_output_dir, "stats", "proto_specific_comparison")
+    os.makedirs(involvement_dir, exist_ok=True)
+    os.makedirs(origin_dir, exist_ok=True)
+    os.makedirs(tests_dir, exist_ok=True)
     print("\n=== Saving Proto-Specific Comparison Results ===")
-    os.makedirs(output_dir, exist_ok=True)
-    
+
     # Save proto-specific involvement statistics
     involvement_data = []
     
@@ -276,7 +328,8 @@ def save_proto_specific_comparison_results(proto_specific_results, output_dir=".
                 })
     
     involvement_df = pd.DataFrame(involvement_data)
-    involvement_file = os.path.join(output_dir, "proto_specific_involvement_statistics.csv")
+    # Save to the new involvement directory
+    involvement_file = os.path.join(involvement_dir, "proto_specific_involvement_statistics.csv")
     involvement_df.to_csv(involvement_file, index=False)
     print(f"Saved proto-specific involvement statistics to {involvement_file}")
     
@@ -302,7 +355,8 @@ def save_proto_specific_comparison_results(proto_specific_results, output_dir=".
     
     if origin_list:
         origin_df = pd.DataFrame(origin_list)
-        origin_file = os.path.join(output_dir, "proto_specific_origin_statistics.csv")
+        # Save to the new origin directory
+        origin_file = os.path.join(origin_dir, "proto_specific_origin_statistics.csv")
         origin_df.to_csv(origin_file, index=False)
         print(f"Saved proto-specific origin statistics to {origin_file}")
     else:
@@ -321,7 +375,8 @@ def save_proto_specific_comparison_results(proto_specific_results, output_dir=".
     tests_file = None
     if all_tests:
         tests_df = pd.DataFrame(all_tests)
-        tests_file = os.path.join(output_dir, "proto_specific_comparison_test_results.csv")
+        # Save to the new tests directory
+        tests_file = os.path.join(tests_dir, "proto_specific_comparison_test_results.csv")
         tests_df.to_csv(tests_file, index=False)
         print(f"Saved proto-specific comparison test results to {tests_file}")
     
@@ -340,12 +395,20 @@ def save_within_group_stage_comparison_results(within_group_results, output_dir=
         output_dir: Directory to save results (defaults to current directory)
         source_dir: Source directory where data is read from, used to construct output path
     """
-    # If source_dir is provided, create "Source_Ana" in the source directory
+    # Define base output directory structure
+    base_output_dir = "results"
     if source_dir:
-        output_dir = os.path.join(source_dir, "Source_Ana")
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
+
+    # Define specific directories for this comparison type
+    involvement_dir = os.path.join(base_output_dir, "involvement", "within_group_comparison")
+    origin_dir = os.path.join(base_output_dir, "origin", "within_group_comparison")
+    tests_dir = os.path.join(base_output_dir, "stats", "within_group_comparison")
+    os.makedirs(involvement_dir, exist_ok=True)
+    os.makedirs(origin_dir, exist_ok=True)
+    os.makedirs(tests_dir, exist_ok=True)
     print("\n=== Saving Within-Group Stage Comparison Results ===")
-    os.makedirs(output_dir, exist_ok=True)
-    
+
     # Save within-group involvement statistics
     involvement_data = []
     
@@ -358,10 +421,11 @@ def save_within_group_stage_comparison_results(within_group_results, output_dir=
                 'Median_Involvement': stats['median'],
                 'Std_Involvement': stats['std'],
                 'Count': stats['count']
-            })
+                })
     
     involvement_df = pd.DataFrame(involvement_data)
-    involvement_file = os.path.join(output_dir, "within_group_involvement_statistics.csv")
+    # Save to the new involvement directory
+    involvement_file = os.path.join(involvement_dir, "within_group_involvement_statistics.csv")
     involvement_df.to_csv(involvement_file, index=False)
     print(f"Saved within-group involvement statistics to {involvement_file}")
     
@@ -385,7 +449,8 @@ def save_within_group_stage_comparison_results(within_group_results, output_dir=
     
     if origin_list:
         origin_df = pd.DataFrame(origin_list)
-        origin_file = os.path.join(output_dir, "within_group_origin_statistics.csv")
+        # Save to the new origin directory
+        origin_file = os.path.join(origin_dir, "within_group_origin_statistics.csv")
         origin_df.to_csv(origin_file, index=False)
         print(f"Saved within-group origin statistics to {origin_file}")
     else:
@@ -403,7 +468,8 @@ def save_within_group_stage_comparison_results(within_group_results, output_dir=
     tests_file = None
     if all_tests:
         tests_df = pd.DataFrame(all_tests)
-        tests_file = os.path.join(output_dir, "within_group_test_results.csv")
+        # Save to the new tests directory
+        tests_file = os.path.join(tests_dir, "within_group_test_results.csv")
         tests_df.to_csv(tests_file, index=False)
         print(f"Saved within-group test results to {tests_file}")
     
