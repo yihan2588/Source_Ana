@@ -1,4 +1,5 @@
 import numpy as np
+import logging # Added
 from scipy import stats as scipy_stats
 from scipy.stats import friedmanchisquare, wilcoxon
 from statsmodels.stats.multitest import multipletests
@@ -20,15 +21,15 @@ def perform_friedman_test(*args):
     """
     # Ensure all groups have the same number of subjects
     if not args:
-        print("Error: No data provided for Friedman test.")
+        logging.error("No data provided for Friedman test.")
         return None
     n_subjects = len(args[0])
     if not all(len(arg) == n_subjects for arg in args):
-        print("Error: All groups must have the same number of subjects for Friedman test.")
+        logging.error("All groups must have the same number of subjects for Friedman test.")
         # Consider handling missing data more gracefully if needed (e.g., imputation or subject removal)
         return None
     if n_subjects < 2 or len(args) < 2:
-        print("Error: Friedman test requires at least 2 subjects and 2 conditions.")
+        logging.error("Friedman test requires at least 2 subjects and 2 conditions.")
         return None
 
     try:
@@ -41,7 +42,7 @@ def perform_friedman_test(*args):
             'Significant': p_value < 0.05
         }
     except Exception as e:
-        print(f"Error performing Friedman test for involvement: {str(e)}")
+        logging.error(f"Error performing Friedman test for involvement: {str(e)}")
         return None
 
 
@@ -54,13 +55,13 @@ def perform_wilcoxon_posthoc(paired_data, stage_names):
                      measurements for one stage, ordered by subject.
                      Example: [[subj1_pre, subj2_pre, ...], [subj1_post, subj2_post, ...]]
         stage_names: A list of names corresponding to the stages in paired_data.
-                     Example: ['pre', 'post']
+                      Example: ['pre', 'post']
 
     Returns:
         A list of dictionaries, each containing results for a pairwise comparison.
     """
     if len(paired_data) != len(stage_names) or len(paired_data) < 2:
-        print("Error: Need at least two stages with corresponding names for Wilcoxon post-hoc.")
+        logging.error("Need at least two stages with corresponding names for Wilcoxon post-hoc.")
         return []
 
     pairwise_results_raw = []
@@ -74,12 +75,12 @@ def perform_wilcoxon_posthoc(paired_data, stage_names):
 
         # Ensure equal length and handle potential all-zero differences
         if len(data1) != len(data2):
-            print(f"Warning: Skipping Wilcoxon for {stage1_name} vs {stage2_name} due to unequal lengths.")
+            logging.warning(f"Skipping Wilcoxon for {stage1_name} vs {stage2_name} due to unequal lengths.")
             continue
         diff = np.array(data1) - np.array(data2)
         if np.all(diff == 0):
              # Wilcoxon raises error if all differences are zero
-             print(f"Skipping Wilcoxon for {stage1_name} vs {stage2_name}: all differences are zero.")
+             logging.info(f"Skipping Wilcoxon for {stage1_name} vs {stage2_name}: all differences are zero.")
              # Assign non-significant p-value or handle as needed
              stat = np.nan
              p_val = 1.0
@@ -88,11 +89,11 @@ def perform_wilcoxon_posthoc(paired_data, stage_names):
                 stat, p_val = wilcoxon(data1, data2, alternative='two-sided', zero_method='pratt') # 'pratt' handles zeros
             except ValueError as e:
                  # Handle cases like fewer than required data points after removing zeros/ties
-                 print(f"Warning: Wilcoxon failed for {stage1_name} vs {stage2_name}: {e}. Assigning p=1.0")
+                 logging.warning(f"Wilcoxon failed for {stage1_name} vs {stage2_name}: {e}. Assigning p=1.0")
                  stat = np.nan
                  p_val = 1.0
             except Exception as e:
-                print(f"Error performing Wilcoxon for {stage1_name} vs {stage2_name}: {str(e)}")
+                logging.error(f"Error performing Wilcoxon for {stage1_name} vs {stage2_name}: {str(e)}")
                 continue # Skip this comparison
 
         pairwise_results_raw.append({
@@ -167,7 +168,7 @@ def perform_chi_square_or_fisher_test(contingency_table):
         return result
 
     except Exception as e:
-        print(f"Error performing statistical test: {str(e)}")
+        logging.error(f"Error performing Chi2/Fisher test: {str(e)}")
         return None
 
 
@@ -225,10 +226,10 @@ def perform_origin_distribution_tests(origin_data, master_region_list, top_n=10)
                 'Statistic': chi2,
                 'DF': dof,
                 'P_Value': p,
-                'Significant': p < 0.05
+                    'Significant': p < 0.05
             })
 
     except Exception as e:
-        print(f"Error performing statistical test for origin distribution: {str(e)}")
+        logging.error(f"Error performing statistical test for origin distribution: {str(e)}")
 
     return stats_results

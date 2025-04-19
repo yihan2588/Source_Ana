@@ -4,17 +4,12 @@ import pandas as pd
 import os
 import re
 import random
+import logging # Added
 from collections import Counter
 from scipy.signal import find_peaks
 from utils import extract_region_name
 
-def visualize_results(all_results, master_region_list):
-    """
-    Create visualizations for individual protocol analysis (boxplots, etc.) if desired.
-    Currently, this is mostly a placeholder or minimal usage.
-    """
-    pass
-
+# Removed visualize_results function as requested
 
 def visualize_treatment_comparison(treatment_comparison_results):
     """
@@ -45,7 +40,7 @@ def create_involvement_boxplot(data, labels, title, filename, colors=None):
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.savefig(filename)
-    print(f"\nSaved involvement boxplot as '{filename}'")
+    logging.info(f"Saved involvement boxplot as '{filename}'")
     plt.close()
 
 
@@ -113,7 +108,7 @@ def create_involvement_summary(all_results, protocols):
 
         plt.tight_layout()
         plt.savefig('involvement_summary.png')
-        print("Saved involvement summary as 'involvement_summary.png'")
+        logging.info("Saved involvement summary as 'involvement_summary.png'")
         plt.close()
 
 
@@ -177,7 +172,7 @@ def create_origin_stage_comparison_barplot(origin_data,
             df = pd.DataFrame(plot_data)
 
         except Exception as e:
-            print(f"Error reading CSV data: {e}. Falling back to direct calculation.")
+            logging.error(f"Error reading CSV data: {e}. Falling back to direct calculation.")
             use_csv_data = False
 
     if not use_csv_data:
@@ -218,10 +213,10 @@ def create_origin_stage_comparison_barplot(origin_data,
             # Sort all regions by frequency
             filtered_regions = sorted(filtered_regions,
                                      key=lambda r: region_total_counts[r],
-                                     reverse=True)
+                                              reverse=True)
 
         if not filtered_regions:
-            print(f"No regions with sufficient counts for origin comparison for {group} group")
+            logging.warning(f"No regions with sufficient counts for origin comparison for {group} group")
             return (None, None)
 
         plot_data = []
@@ -243,10 +238,10 @@ def create_origin_stage_comparison_barplot(origin_data,
         df = pd.DataFrame(plot_data)
 
     if df.empty:
-        print(f"No data available for origin comparison for {group} group")
+        logging.warning(f"No data available for origin comparison for {group} group")
         return (None, None)
 
-    max_percentage = df['Percentage'].max() * 1.1  # for x-axis scaling
+    max_percentage = df['Percentage'].max() * 1.1 if not df.empty else 100 # for x-axis scaling
 
     # Create subplots for each stage with dynamic sizing based on number of regions
     region_count = len(df['Region'].unique())
@@ -318,7 +313,7 @@ def create_origin_stage_comparison_barplot(origin_data,
 
     filename = os.path.join(output_dir, f"origin_stages_{group.lower()}.png")
     plt.savefig(filename)
-    print(f"Saved origin stage comparison for {group} group as '{filename}'")
+    logging.info(f"Saved origin stage comparison for {group} group as '{filename}'")
     plt.close()
 
     return (filtered_regions, max_percentage)
@@ -328,6 +323,7 @@ def create_combined_origin_comparison_barplot(origin_data,
                                               groups,
                                               stages,
                                               master_region_list,
+                                              protocol_name=None, # Added for unique filenames
                                               filtered_regions=None,
                                               max_percentage=None,
                                               min_count=2,
@@ -338,6 +334,7 @@ def create_combined_origin_comparison_barplot(origin_data,
     """
     Create a combined horizontal bar chart comparing origin distributions
     between treatment groups across all stages. Saves plot within the provided output_dir.
+    Includes protocol_name in filename if provided.
     """
     # output_dir is already specific (e.g., results/origin/overall_comparison)
     os.makedirs(output_dir, exist_ok=True)
@@ -391,7 +388,7 @@ def create_combined_origin_comparison_barplot(origin_data,
                                               reverse=True)
 
         except Exception as e:
-            print(f"Error reading CSV data: {e}. Falling back to direct calculation.")
+            logging.error(f"Error reading CSV data: {e}. Falling back to direct calculation.")
             use_csv_data = False
 
     if not use_csv_data:
@@ -465,11 +462,11 @@ def create_combined_origin_comparison_barplot(origin_data,
         df = pd.DataFrame(plot_data)
 
     if df.empty or not filtered_regions:
-        print("No regions with sufficient counts for combined origin comparison")
+        logging.warning(f"No regions with sufficient counts for combined origin comparison {f'for {protocol_name}' if protocol_name else ''}")
         return
 
     if max_percentage is None:
-        max_percentage = df['Percentage'].max() * 1.1
+        max_percentage = df['Percentage'].max() * 1.1 if not df.empty else 100
 
     # Dynamic figure sizing based on number of regions
     region_count = len(filtered_regions)
@@ -541,21 +538,24 @@ def create_combined_origin_comparison_barplot(origin_data,
     plt.tight_layout()
     plt.subplots_adjust(top=0.9)
 
-    # Filename remains generic, path is determined by output_dir
-    filename = os.path.join(output_dir, "combined_origin_comparison.png")
+    # Construct filename, including protocol if provided
+    base_filename = "combined_origin_comparison"
+    if protocol_name:
+        base_filename = f"{protocol_name}_{base_filename}"
+    filename = os.path.join(output_dir, f"{base_filename}.png")
+
     plt.savefig(filename)
-    print(f"Saved combined origin comparison as '{filename}'")
+    logging.info(f"Saved combined origin comparison {f'for {protocol_name}' if protocol_name else ''} as '{filename}'")
     plt.close()
 
 
-def visualize_overall_treatment_comparison(overall_comparison_results, output_dir="results", source_dir=None):
+def visualize_overall_treatment_comparison(overall_comparison_results, source_dir=None): # Removed output_dir
     """
     Create visualizations for the overall treatment group comparison
     (collapsing subjects, nights, and protos).
     
     Args:
         overall_comparison_results: Results from overall treatment comparison
-        output_dir: Directory to save visualizations (defaults to "results")
         source_dir: Source directory where data is read from, used to construct output path
     """
     # Define base output directory structure
@@ -641,7 +641,7 @@ def visualize_overall_treatment_comparison(overall_comparison_results, output_di
         # Save to the new involvement directory
         filename = os.path.join(involvement_dir, "overall_involvement_comparison.png")
         plt.savefig(filename)
-        print(f"\nSaved overall involvement comparison barplot as '{filename}'")
+        logging.info(f"Saved overall involvement comparison barplot as '{filename}'")
         plt.close()
 
     # 2) Separate bar charts for each group - REMOVED as per Task 1
@@ -691,6 +691,7 @@ def visualize_overall_treatment_comparison(overall_comparison_results, output_di
                  groups,
                  stages,
                  master_region_list,
+                 protocol_name=None, # No protocol name for overall comparison
                  filtered_regions=filtered_regions,
                  max_percentage=max_percentage,
                  min_count=3,
@@ -701,7 +702,7 @@ def visualize_overall_treatment_comparison(overall_comparison_results, output_di
              )
 
 
-def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, output_dir="results", source_dir=None):
+def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, source_dir=None): # Removed output_dir
     """
     Visualize the time series data for a few randomly selected voxels.
 
@@ -709,7 +710,6 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, output_dir="results"
         csv_file: Path to the original CSV file containing the time series data
         wave_name: Name of the wave file (for titling and saving)
         num_voxels: Number of random voxels to plot
-        output_dir: Directory to save the output plots (defaults to "results")
         source_dir: Source directory where the data is read from, used to construct the output path
 
     This function:
@@ -720,9 +720,10 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, output_dir="results"
     5. Marks local maxima with blue dots.
     6. Saves the figure to a structured directory.
     """
-    # If source_dir is provided, create "Source_Ana" in the source directory
+    # Define base output directory structure
+    base_output_dir = "results"
     if source_dir:
-        output_dir = os.path.join(source_dir, "Source_Ana")
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
 
     # Extract protocol and stage from the wave name for directory structure
     protocol = "unknown"
@@ -735,7 +736,7 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, output_dir="results"
         stage = stage_match.group(1).lower()
 
     # Create output directory if it doesn't exist
-    plot_dir = os.path.join(output_dir, "voxel_plots", protocol, stage)
+    plot_dir = os.path.join(base_output_dir, "voxel_plots", protocol, stage) # Use base_output_dir
     os.makedirs(plot_dir, exist_ok=True)
 
     try:
@@ -756,19 +757,19 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, output_dir="results"
             data = np.abs(df.loc[:, numeric_cols].values)
             voxel_names = df.iloc[:, 0].values
         else:
-            print(f"Error: CSV format doesn't match expected format for {wave_name}")
+            logging.error(f"CSV format doesn't match expected format for {wave_name}")
             return False
 
         # Select random voxels
         num_available_voxels = data.shape[0]
         if num_available_voxels < num_voxels:
-            print(f"Warning: Only {num_available_voxels} voxels available in {wave_name}, plotting all.")
+            logging.warning(f"Only {num_available_voxels} voxels available in {wave_name}, plotting all.")
             selected_indices = list(range(num_available_voxels))
         else:
             selected_indices = random.sample(range(num_available_voxels), num_voxels)
 
         if not selected_indices:
-            print(f"Error: No voxels to plot for {wave_name}")
+            logging.error(f"No voxels to plot for {wave_name}")
             return False
 
         # Create subplots
@@ -801,30 +802,29 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, output_dir="results"
         # Save the figure
         filename = os.path.join(plot_dir, f"{wave_name}_voxel_waveforms.png")
         plt.savefig(filename)
-        print(f"Saved voxel waveform plot as '{filename}'")
+        logging.info(f"Saved voxel waveform plot as '{filename}'")
 
         # Save a copy next to the original CSV file
         csv_dir = os.path.dirname(str(csv_file))
         csv_basename = os.path.basename(str(csv_file))
         local_filename = os.path.join(csv_dir, f"{os.path.splitext(csv_basename)[0]}_voxel_waveforms.png")
         plt.savefig(local_filename)
-        print(f"Saved copy of voxel waveform plot next to CSV as '{local_filename}'")
+        logging.info(f"Saved copy of voxel waveform plot next to CSV as '{local_filename}'")
 
         plt.close(fig)
         return True
 
     except Exception as e:
-        print(f"Error visualizing voxel waveforms for {wave_name}: {str(e)}")
+        logging.error(f"Error visualizing voxel waveforms for {wave_name}: {str(e)}")
         return False
 
 
-def visualize_proto_specific_comparison(proto_specific_results, output_dir="results", source_dir=None):
+def visualize_proto_specific_comparison(proto_specific_results, source_dir=None): # Removed output_dir
     """
     Create visualizations for the proto-specific comparison.
-    
+
     Args:
         proto_specific_results: Results from proto-specific comparison
-        output_dir: Directory to save visualizations (defaults to "results")
         source_dir: Source directory where data is read from, used to construct output path
     """
     # Define base output directory structure
@@ -916,7 +916,7 @@ def visualize_proto_specific_comparison(proto_specific_results, output_dir="resu
             # Save to the new involvement directory, including protocol in filename
             filename = os.path.join(involvement_dir, f"{protocol}_involvement_comparison.png")
             plt.savefig(filename)
-            print(f"\nSaved involvement comparison barplot for {protocol} as '{filename}'")
+            logging.info(f"Saved involvement comparison barplot for {protocol} as '{filename}'")
             plt.close()
 
         # 2) Create individual bar charts for involvement for each group - REMOVED as per Task 1
@@ -966,6 +966,7 @@ def visualize_proto_specific_comparison(proto_specific_results, output_dir="resu
                  groups,
                  stages,
                  master_region_list,
+                 protocol_name=protocol, # Pass protocol name for unique filename
                  filtered_regions=filtered_regions,
                  max_percentage=max_percentage,
                  min_count=2,
@@ -976,29 +977,26 @@ def visualize_proto_specific_comparison(proto_specific_results, output_dir="resu
              )
 
 
-def visualize_region_time_series(wave_data, csv_file, output_dir="results", source_dir=None):
+def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Removed output_dir
     """
     Visualize the time series data for each brain region.
-    
+
     Args:
         wave_data: Dictionary containing the results from analyze_slow_wave
         csv_file: Path to the original CSV file containing the time series data
-        output_dir: Directory to save the output plots (defaults to "results")
         source_dir: Source directory where the data is read from, used to construct the output path
-    
+
     This function:
     1. Groups voxels by region
     2. Plots time series data for each region (-50ms to 50ms)
     3. Marks local maxima with blue dots
     4. Marks origins with red dots
     """
-    # If source_dir is provided, create "Source_Ana" in the source directory
+    # Define base output directory structure
+    base_output_dir = "results"
     if source_dir:
-        output_dir = os.path.join(source_dir, "Source_Ana")
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
+
     # Extract protocol and stage from wave_name
     protocol = "unknown"
     stage = "unknown"
@@ -1012,11 +1010,11 @@ def visualize_region_time_series(wave_data, csv_file, output_dir="results", sour
         protocol = protocol_match.group(1).lower()
     if stage_match:
         stage = stage_match.group(1).lower()
-        
+
     # Create subdirectories
-    plot_dir = os.path.join(output_dir, "region_plots", protocol, stage)
+    plot_dir = os.path.join(base_output_dir, "region_plots", protocol, stage) # Use base_output_dir
     os.makedirs(plot_dir, exist_ok=True)
-    
+
     # Load the CSV data
     try:
         df = pd.read_csv(csv_file)
@@ -1031,23 +1029,23 @@ def visualize_region_time_series(wave_data, csv_file, output_dir="results", sour
                         numeric_cols.append(col)
                     except ValueError:
                         continue
-            
+
             time_points = np.array([float(t) for t in numeric_cols]) * 1000  # Convert to ms
             data = np.abs(df.loc[:, numeric_cols].values)
             voxel_names = df.iloc[:, 0].values
-            
+
             # Filter time points to the window of -50ms to 50ms
             window_start = -50  # ms
             window_end = 50     # ms
             window_mask = (time_points >= window_start) & (time_points <= window_end)
-            
+
             if sum(window_mask) == 0:
-                print(f"Warning: No time points found in window [{window_start}, {window_end}] ms")
-                return
-            
+                logging.warning(f"No time points found in window [{window_start}, {window_end}] ms for {wave_name}")
+                return False # Indicate failure
+
             window_times = time_points[window_mask]
             window_data = data[:, window_mask]
-            
+
             # Group voxels by region
             region_voxels = {}
             for i, voxel_name in enumerate(voxel_names):
@@ -1109,14 +1107,14 @@ def visualize_region_time_series(wave_data, csv_file, output_dir="results", sour
                         # Check if the closest local maximum is within a reasonable time window (e.g., 5ms)
                         if abs(closest_max_time - origin_time) <= 5:  # 5ms tolerance
                             # Plot the origin at the actual local maximum
-                            plt.scatter(closest_max_time, closest_max_value, 
+                            plt.scatter(closest_max_time, closest_max_value,
                                        color='red', s=50, marker='*', zorder=4)
                         else:
-                            print(f"Warning: No local maximum found near origin time {origin_time:.2f}ms "
-                                  f"for region {region} within ±5ms window")
+                            logging.warning(f"No local maximum found near origin time {origin_time:.2f}ms "
+                                  f"for region {region} in wave {wave_name} within ±5ms window")
                     else:
-                        print(f"Warning: No local maxima detected for region {region}")
-            
+                        logging.warning(f"No local maxima detected for origin region {region} in wave {wave_name}")
+
             # Add labels and title
             plt.xlabel('Time (ms)')
             plt.ylabel('Amplitude')
@@ -1132,35 +1130,34 @@ def visualize_region_time_series(wave_data, csv_file, output_dir="results", sour
             # Save the figure to the organized directory structure
             filename = os.path.join(plot_dir, f"{wave_name}_region_time_series.png")
             plt.savefig(filename)
-            print(f"Saved region time series plot as '{filename}'")
-            
+            logging.info(f"Saved region time series plot as '{filename}'")
+
             # Save a copy next to the original CSV file
             csv_dir = os.path.dirname(str(csv_file))
             csv_basename = os.path.basename(str(csv_file))
             local_filename = os.path.join(csv_dir, f"{os.path.splitext(csv_basename)[0]}_region_time_series.png")
             plt.savefig(local_filename)
-            print(f"Saved copy of region time series plot next to CSV as '{local_filename}'")
-            
+            logging.info(f"Saved copy of region time series plot next to CSV as '{local_filename}'")
+
             plt.close()
-            
+
             return True
-            
+
         else:
-            print(f"Error: CSV format doesn't match expected format")
+            logging.error(f"CSV format doesn't match expected format for {wave_name}")
             return False
-            
+
     except Exception as e:
-        print(f"Error visualizing region time series: {str(e)}")
+        logging.error(f"Error visualizing region time series for {wave_name}: {str(e)}")
         return False
 
 
-def visualize_within_group_stage_comparison(within_group_results, output_dir="results", source_dir=None):
+def visualize_within_group_stage_comparison(within_group_results, source_dir=None): # Removed output_dir
     """
     Create visualizations for the within-group stage comparison.
-    
+
     Args:
         within_group_results: Results from within-group stage comparison
-        output_dir: Directory to save visualizations (defaults to "results")
         source_dir: Source directory where data is read from, used to construct output path
     """
     # Define base output directory structure
@@ -1232,7 +1229,7 @@ def visualize_within_group_stage_comparison(within_group_results, output_dir="re
             # Save to the new involvement directory, including group in filename
             filename = os.path.join(involvement_dir, f"within_group_involvement_{group.lower()}.png")
             plt.savefig(filename)
-            print(f"Saved within-group involvement barplot for {group} as '{filename}'")
+            logging.info(f"Saved within-group involvement barplot for {group} as '{filename}'")
             plt.close()
 
         # Create origin comparison barplot for this group

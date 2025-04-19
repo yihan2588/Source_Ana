@@ -1,3 +1,4 @@
+import logging # Added
 from collections import Counter
 
 def extract_region_name(full_name):
@@ -117,7 +118,7 @@ def read_subject_condition_mapping(json_path):
             mapping = json.load(f)
         return mapping
     except Exception as e:
-        print(f"Error reading Subject_Condition JSON file: {str(e)}")
+        logging.error(f"Error reading Subject_Condition JSON file '{json_path}': {str(e)}")
         return None
 
 

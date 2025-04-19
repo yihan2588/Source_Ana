@@ -1,5 +1,6 @@
 import os
 import re
+import logging # Added
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -21,7 +22,7 @@ from utils import (
 def validate_wave_result(result, csv_file_path=None):
     """
     Print and save validation information for a single wave file output.
-    
+
     Args:
         result: Dictionary containing wave analysis results from analyze_slow_wave()
         csv_file_path: Path to the original CSV file (to save log file next to it)
@@ -29,12 +30,12 @@ def validate_wave_result(result, csv_file_path=None):
     wave_name = result['wave_name']
     involvement_percentage = result['involvement_percentage']
     involvement_count = result['involvement_count']
-    
+
     # Prepare validation output
     validation_lines = []
     validation_lines.append(f"[VALIDATION] Wave: {wave_name}")
     validation_lines.append(f"[VALIDATION] Involvement: {involvement_percentage:.2f}% ({involvement_count} voxels)")
-    
+
     # Add origin information
     origins = result.get('origins', None)
     if origins is not None and not origins.empty:
@@ -43,18 +44,18 @@ def validate_wave_result(result, csv_file_path=None):
             validation_lines.append(f"[VALIDATION]   - {row['region']} at {row['peak_time']:.2f}ms")
     else:
         validation_lines.append("[VALIDATION] No origin regions detected")
-    
+
     # Add window and threshold information
     window = result.get('window', (0, 0))
     threshold = result.get('threshold', 0)
     validation_lines.append(f"[VALIDATION] Window: {window[0]}ms to {window[1]}ms, Threshold: {threshold:.6f}")
     validation_lines.append("[VALIDATION] ------------------------------")
-    
-    # Print to console
+
+    # Log to main pipeline log
     for line in validation_lines:
-        print(line)
-    
-    # Save to log file if CSV path is provided
+        logging.info(line)
+
+    # Save to individual log file if CSV path is provided
     if csv_file_path:
         try:
             # Create log file next to the original CSV
@@ -62,9 +63,10 @@ def validate_wave_result(result, csv_file_path=None):
             with open(log_file_path, 'w') as log_file:
                 for line in validation_lines:
                     log_file.write(f"{line}\n")
-            print(f"[VALIDATION] Saved validation log to: {log_file_path}")
+            logging.info(f"[VALIDATION] Saved validation log to: {log_file_path}")
         except Exception as e:
-            print(f"[VALIDATION] Error saving validation log: {str(e)}")
+            logging.error(f"[VALIDATION] Error saving validation log: {str(e)}")
+
 # Updated imports for stats_utils
 from stats_utils import (
     perform_friedman_test,
@@ -81,8 +83,8 @@ def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=
     """
     Analyze a single slow wave CSV file to extract origin and involvement metrics.
     """
-    if debug:
-        print(f"\nAnalyzing {wave_name}...")
+    # Debug logging can be controlled by setting the logger level if needed
+    # logging.debug(f"\nAnalyzing {wave_name}...")
     try:
         if 'Time' in df.columns:
             # CSV format that starts with a 'Time' column
@@ -107,8 +109,8 @@ def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=
     window_end = 50     # ms
     window_mask = (time_points >= window_start) & (time_points <= window_end)
     if sum(window_mask) == 0:
-        print(f"Warning: No time points found in window [{window_start}, {window_end}] ms")
-        window_mask = np.ones_like(time_points, dtype=bool)
+        logging.warning(f"No time points found in window [{window_start}, {window_end}] ms for {wave_name}")
+        window_mask = np.ones_like(time_points, dtype=bool) # Use all points if window is empty
 
     window_data = data[:, window_mask]
     window_times = time_points[window_mask]
@@ -152,12 +154,12 @@ def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=
         n_origins = max(1, int(len(peak_times_df) * 0.1))
         origins = peak_times_df.head(n_origins)
 
-    if debug:
-        print(f"Involvement: {involvement_percentage:.1f}% ({num_involved}/{total_voxels} voxels)")
-        if voxel_peak_times:
-            print("Top origin regions:")
-            for _, row in origins.iterrows():
-                print(f"- {row['region']} at {row['peak_time']:.1f}ms")
+    # Debug logging can be controlled by setting the logger level if needed
+    # logging.debug(f"Involvement: {involvement_percentage:.1f}% ({num_involved}/{total_voxels} voxels)")
+    # if voxel_peak_times:
+    #     logging.debug("Top origin regions:")
+    #     for _, row in origins.iterrows():
+    #         logging.debug(f"- {row['region']} at {row['peak_time']:.1f}ms")
 
     return {
         'wave_name': wave_name,
@@ -182,8 +184,8 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
         visualize_regions: If True, generate region visualizations
         source_dir: Source directory where data is read from, used to construct output path
     """
-    print(f"Processing EEG data directory: {directory_path}")
-    
+    logging.info(f"Processing EEG data directory: {directory_path}")
+
     # Define the expected treatment groups
     treatment_groups = ["Active", "SHAM"]
     # New structure: {group: {subject: {protocol: {stage: [wave_results]}}}}
@@ -198,50 +200,50 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
     # Filter subjects if specified
     if selected_subjects:
         subject_dirs = [d for d in subject_dirs if d.name in selected_subjects]
-    
+
     if not subject_dirs:
-        print(f"Warning: No subject directories found.")
+        logging.warning(f"No subject directories found matching selection in {directory_path}.")
         return None
-    
-    print(f"\nProcessing {len(subject_dirs)} subjects...")
+
+    logging.info(f"\nProcessing {len(subject_dirs)} subjects...")
     for subject_dir in subject_dirs:
         subject_id = subject_dir.name
-        
+
         # Skip if subject not in mapping
         if subject_id not in subject_condition_mapping:
-            print(f"Warning: Subject {subject_id} not found in condition mapping. Skipping.")
+            logging.warning(f"Subject {subject_id} not found in condition mapping. Skipping.")
             continue
         # Get treatment group for this subject
         group = subject_condition_mapping[subject_id]
         if group not in treatment_groups:
-            print(f"Warning: Unknown treatment group '{group}' for {subject_id}. Skipping.")
+            logging.warning(f"Unknown treatment group '{group}' for {subject_id}. Skipping.")
             continue
 
         # Initialize subject entry if not present
         if subject_id not in results_by_treatment_group[group]:
             results_by_treatment_group[group][subject_id] = {}
 
-        print(f"Processing {subject_id} (Group: {group})...")
+        logging.info(f"Processing {subject_id} (Group: {group})...")
 
         # Get night directories
         night_dirs = [d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("Night")]
-        
+
         # Filter nights if specified
         if selected_nights:
             night_dirs = [d for d in night_dirs if d.name in selected_nights]
-        
+
         if not night_dirs:
-            print(f"Warning: No night directories found for {subject_id}.")
+            logging.warning(f"No selected night directories found for {subject_id}.")
             continue
-        
+
         for night_dir in night_dirs:
             night_id = night_dir.name
-            print(f"  Processing {night_id}...")
-            
+            logging.info(f"  Processing {night_id}...")
+
             # Navigate to the SourceRecon directory
             source_recon_dir = night_dir / "Output" / "SourceRecon"
             if not source_recon_dir.exists():
-                print(f"Warning: SourceRecon directory not found for {subject_id}/{night_id}.")
+                logging.warning(f"SourceRecon directory not found for {subject_id}/{night_id}. Skipping.")
                 continue
             # Process the CSV files in the SourceRecon directory for this specific night
             # subject_night_results has format {protocol: {stage: [wave_results]}}
@@ -268,19 +270,22 @@ def process_eeg_data_directory(directory_path, subject_condition_mapping, select
                         num_waves_processed = len(subject_night_results[protocol][stage])
                         processed_files += num_waves_processed
                         # total_files could be calculated once at the start if needed accurately
+                        # error_files count is handled within process_directory
 
     # Recalculate total_files based on collected data for accuracy
     total_files = processed_files # Approximation for now
+    # Get error count from process_directory if possible, or keep track here
+    # For now, error_files is not accurately tracked at this level, rely on process_directory logs
 
-    print(f"\nProcessing summary:")
-    print(f"Total files: {total_files}")
-    print(f"Successfully processed: {processed_files}")
-    print(f"Errors: {error_files}")
-    
+    logging.info(f"\nProcessing summary:")
+    # logging.info(f"Total files found (approx): {total_files}") # This count is inaccurate
+    logging.info(f"Total waves successfully processed: {processed_files}")
+    # logging.info(f"Errors encountered: {error_files}") # Error count not reliable here
+
     if not any(results_by_treatment_group.values()):
-        print("No data was processed successfully.")
+        logging.error("No data was processed successfully.")
         return None
-    
+
     return results_by_treatment_group
 
 
@@ -294,13 +299,12 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
         visualize_regions: If True, generate region visualizations
         source_dir: Source directory where data is read from, used to construct output path
     """
-    if not quiet:
-        print(f"Processing directory: {directory_path}")
+    # Use logging instead of quiet flag
+    logging.info(f"Processing directory: {directory_path}")
 
     csv_files = list(Path(directory_path).glob('*.csv'))
     if not csv_files:
-        if not quiet:
-            print("No CSV files found in the specified directory.")
+        logging.warning(f"No CSV files found in: {directory_path}")
         return None
 
     protocol_pattern = r'(proto\d+)'
@@ -329,120 +333,40 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
                 df = pd.read_csv(csv_file)
                 wave_name = csv_file.stem
                 result = analyze_slow_wave(df, wave_name, debug=False)
-                
-                # Validate, print, and save wave result information
-                validate_wave_result(result, csv_file)
-                
+                # Validate, log, and save wave result information
+                validate_wave_result(result, csv_file) # Handles logging internally
+
                 results_by_protocol[protocol][stage].append(result)
                 processed_files += 1
-                
+
                 # Generate region time series visualization
                 if visualize_regions:
                     # Use source_dir if provided, otherwise use the standard 'results' directory
-                    visualize_region_time_series(result, csv_file, output_dir="results", source_dir=source_dir)
+                    visualize_region_time_series(result, csv_file, source_dir=source_dir) # output_dir handled internally
                     # Add the new call for voxel waveforms
-                    plot_voxel_waveforms(csv_file, wave_name, output_dir="results", source_dir=source_dir)
-                
-                if not quiet:
-                    print(f"Processed {filename} - Protocol: {protocol}, Stage: {stage}")
+                    plot_voxel_waveforms(csv_file, wave_name, source_dir=source_dir) # output_dir handled internally
+
+                # logging.info(f"Processed {filename} - Protocol: {protocol}, Stage: {stage}") # Logged by validate_wave_result
             except Exception as e:
                 error_files += 1
-                if not quiet:
-                    print(f"Error processing {filename}: {str(e)}")
+                logging.error(f"Error processing {filename}: {str(e)}")
 
-    if not quiet:
-        print(f"\nProcessing summary:")
-        print(f"Total files: {total_files}")
-        print(f"Successfully processed: {processed_files}")
-        print(f"Errors: {error_files}")
+    logging.info(f"\nDirectory processing summary for: {directory_path}")
+    logging.info(f"Total files found: {total_files}")
+    logging.info(f"Successfully processed: {processed_files}")
+    logging.info(f"Errors: {error_files}")
 
     return results_by_protocol
 
 
-def analyze_protocol_results(protocol_name, protocol_results, master_region_list):
-    """
-    Analyze results for a single protocol across all stages.
-    """
-    print(f"\n=== Analysis for {protocol_name} ===")
-    # Note: This function operates on data aggregated across subjects for a single protocol.
-    # It cannot perform paired tests as subject info is lost at this stage.
-    # We will only perform origin analysis here. Paired involvement tests are done elsewhere.
-
-    stages = list(protocol_results.keys()) # Use list for potential ordering later if needed
-
-    # --- Involvement Analysis Removed ---
-    # The previous involvement analysis using Kruskal-Wallis/Mann-Whitney U on aggregated data
-    # is removed because the user requested paired tests (Friedman/Wilcoxon), which require
-    # subject-level data not available in the `protocol_results` structure passed here.
-    # Paired involvement tests across stages are now handled in `analyze_within_group_stage_comparison`.
-
-    print("\nInvolvement Statistics (Aggregated - Descriptive Only):")
-    # Calculate and print descriptive stats, but no inferential tests here.
-    involvement_stats = {}
-    for stage in stages:
-        involvement_list = [res['involvement_percentage'] for res in protocol_results.get(stage, [])]
-        involvement_stats[stage] = calculate_involvement_statistics(involvement_list)
-        stats_data = involvement_stats[stage]
-        print(f"{stage.capitalize()}: {stats_data['mean']:.1f}% ± {stats_data['std']:.1f}% (n={stats_data['count']})")
-
-    # Calculate origin statistics
-    origin_data = {}
-    for stage in stages:
-        stage_results = protocol_results[stage]
-        total_waves = len(stage_results)
-        region_counts = calculate_origin_statistics(stage_results, stage, total_waves)
-        origin_data[stage] = {
-            'region_counts': region_counts,
-            'total_waves': total_waves
-        }
-
-    print("\nOrigin Statistics:")
-    for stage, data_dict in origin_data.items():
-        rc = data_dict['region_counts']
-        tw = data_dict['total_waves']
-        if rc and tw > 0:
-            print(f"{stage.capitalize()} (n={tw} waves):")
-            # Show top 5 in the order of master_region_list
-            ordered_regions = [r for r in master_region_list if r in rc]
-            displayed = 0
-            for region in ordered_regions:
-                if displayed >= 5:
-                    break
-                count = rc[region]
-                percentage = (count / tw) * 100
-                print(f"  {region}: {count}/{tw} waves ({percentage:.1f}%)")
-                displayed += 1
-        else:
-            print(f"{stage.capitalize()}: No origins detected")
-
-    # Perform statistical tests on origin distribution
-    origin_test_results = perform_origin_distribution_tests(origin_data, master_region_list)
-
-    for result in origin_test_results:
-        if 'DF' in result:
-            print(f"\n{result['Test']} for Origin Distribution: χ²={result['Statistic']:.2f}, df={result['DF']}, p={result['P_Value']:.4f}")
-        else:
-            print(f"\n{result['Test']} for Origin Distribution: p={result['P_Value']:.4f}")
-        if result['Significant']:
-            print("Significant differences detected in origin distribution between stages.")
-
-    if not origin_test_results:
-        print("\nNot enough data for statistical test of origin distribution.")
-
-    return {
-        # 'involvement_data' and 'involvement_test_results' removed as they are no longer calculated here.
-        'origin_data': origin_data,
-        'involvement_stats': involvement_stats, # Keep descriptive stats
-        'origin_test_results': origin_test_results
-    }
-
+# Removed analyze_protocol_results function as requested
 
 
 def analyze_overall_treatment_comparison(results_by_treatment_group, master_region_list, min_occurrence_threshold=3):
     """
     Perform overall treatment group comparison by collapsing subjects, nights, and protos.
     """
-    print("\n=== Overall Treatment Group Comparison (Collapsing Subjects, Nights, and Protos) ===")
+    logging.info("\n=== Overall Treatment Group Comparison (Collapsing Subjects, Nights, and Protos) ===")
 
     # Collect all possible stages across all groups, subjects, and protocols
     all_stages = set()
@@ -462,40 +386,40 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
     # Collect all waves for each treatment group across all subjects, protocols, and stages
     all_waves_by_group = {'Active': {}, 'SHAM': {}}
     groups = list(results_by_treatment_group.keys())
-    print(f"DEBUG: Starting aggregation for all_waves_by_group. Groups: {groups}") # DEBUG
+    logging.debug(f"Starting aggregation for all_waves_by_group. Groups: {groups}")
     for group in groups:
-        print(f"DEBUG: Processing group: {group}") # DEBUG
+        logging.debug(f"Processing group: {group}")
         all_waves_by_group[group] = {stage: [] for stage in stages} # Initialize stages for the group
         subjects_in_group = list(results_by_treatment_group[group].keys())
-        print(f"DEBUG: Subjects in group '{group}': {subjects_in_group}") # DEBUG
+        logging.debug(f"Subjects in group '{group}': {subjects_in_group}")
         for subject in subjects_in_group:
-            print(f"DEBUG:  Processing subject: {subject}") # DEBUG
+            logging.debug(f"  Processing subject: {subject}")
             protocols_for_subject = list(results_by_treatment_group[group][subject].keys())
-            print(f"DEBUG:   Protocols for subject '{subject}': {protocols_for_subject}") # DEBUG
+            logging.debug(f"   Protocols for subject '{subject}': {protocols_for_subject}")
             for protocol in protocols_for_subject:
-                print(f"DEBUG:    Processing protocol: {protocol}") # DEBUG
+                logging.debug(f"    Processing protocol: {protocol}")
                 stages_for_protocol = list(results_by_treatment_group[group][subject][protocol].keys())
-                print(f"DEBUG:     Stages for protocol '{protocol}': {stages_for_protocol}") # DEBUG
+                logging.debug(f"     Stages for protocol '{protocol}': {stages_for_protocol}")
                 for stage in stages: # Iterate through ALL possible stages
                     # Check if the stage exists for this subject/protocol
                     if stage in stages_for_protocol: # Check against actual stages for this proto/subj
                         wave_list = results_by_treatment_group[group][subject][protocol][stage]
-                        print(f"DEBUG:      Extending stage '{stage}' for group '{group}' with {len(wave_list)} items. Source: {group}/{subject}/{protocol}/{stage}") # DEBUG
+                        logging.debug(f"      Extending stage '{stage}' for group '{group}' with {len(wave_list)} items. Source: {group}/{subject}/{protocol}/{stage}")
                         # Check type before extending
                         if not isinstance(wave_list, list):
-                             print(f"ERROR: Expected list but got {type(wave_list)} for {group}/{subject}/{protocol}/{stage}")
+                             logging.error(f"Expected list but got {type(wave_list)} for {group}/{subject}/{protocol}/{stage}")
                              continue
                         if wave_list and not all(isinstance(item, dict) for item in wave_list):
-                             print(f"ERROR: Expected list of dicts but found other types in {group}/{subject}/{protocol}/{stage}")
-                             # Print the non-dict items
+                             logging.error(f"Expected list of dicts but found other types in {group}/{subject}/{protocol}/{stage}")
+                             # Log the non-dict items
                              for idx, item in enumerate(wave_list):
                                  if not isinstance(item, dict):
-                                     print(f"ERROR item index {idx}: type={type(item)}, value='{item}'") # Added quotes for clarity
+                                     logging.error(f"ERROR item index {idx}: type={type(item)}, value='{item}'")
                              continue
                         # If checks pass, extend
                         all_waves_by_group[group][stage].extend(wave_list)
-                    # else: # DEBUG - uncomment if needed
-                    #    print(f"DEBUG:      Stage '{stage}' not found for {group}/{subject}/{protocol}") # DEBUG
+                    # else:
+                    #    logging.debug(f"      Stage '{stage}' not found for {group}/{subject}/{protocol}")
 
 
     # Calculate involvement (using the correctly aggregated all_waves_by_group)
@@ -507,11 +431,11 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
     for group in groups:
         # Simplified Debugging loop V3
         involvement_by_stage = {}
-        print(f"\nDEBUG: Calculating involvement for group '{group}'...") # Keep this outer debug print
+        logging.debug(f"\nCalculating involvement for group '{group}'...")
         for stage in stages:
             stage_list = []
             items_in_stage = all_waves_by_group[group].get(stage, [])
-            print(f"DEBUG:  Processing stage '{stage}', length: {len(items_in_stage)}") # Keep this inner debug print
+            logging.debug(f"  Processing stage '{stage}', length: {len(items_in_stage)}")
             item_counter = 0
             for res_item in items_in_stage: # Use distinct variable name
                 item_counter += 1
@@ -522,24 +446,24 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
                         stage_list.append(value)
                     else:
                         # Log unexpected type if not dict
-                        print(f"DEBUG:   Item {item_counter} is NOT a dict. Type: {type(res_item)}, Value: '{res_item}'")
+                        logging.warning(f"   Item {item_counter} is NOT a dict. Type: {type(res_item)}, Value: '{res_item}'")
                 except TypeError as te:
                     # Catch the specific error during access
-                    print(f"DEBUG:   *** TypeError on item {item_counter}. Type was {type(res_item)}. Error: {te}. Item: '{res_item}'")
+                    logging.error(f"   *** TypeError on item {item_counter}. Type was {type(res_item)}. Error: {te}. Item: '{res_item}'")
                 except KeyError as ke:
                     # Catch missing key if it's a dict but key is missing
-                    print(f"DEBUG:   *** KeyError on item {item_counter}. Key: {ke}. Item: '{res_item}'")
+                    logging.error(f"   *** KeyError on item {item_counter}. Key: {ke}. Item: '{res_item}'")
                 except Exception as e:
                     # Catch any other error during access
-                    print(f"DEBUG:   *** Unexpected Error on item {item_counter}. Error: {e}. Item: '{res_item}'")
+                    logging.error(f"   *** Unexpected Error on item {item_counter}. Error: {e}. Item: '{res_item}'")
             involvement_by_stage[stage] = stage_list
 
-        # Safety check (optional, can be removed if debug loop is sufficient)
+        # Safety check
         for stage in stages:
             original_count = len(all_waves_by_group[group].get(stage, []))
             processed_count = len(involvement_by_stage.get(stage, []))
             if original_count != processed_count:
-                 print(f"Warning in analyze_overall_treatment_comparison ({group}, {stage}): Skipped {original_count - processed_count} non-dictionary items during involvement calculation.")
+                 logging.warning(f"In analyze_overall_treatment_comparison ({group}, {stage}): Skipped {original_count - processed_count} non-dictionary items during involvement calculation.")
 
         stats_by_stage = {
             stage: calculate_involvement_statistics(involvement_by_stage[stage])
@@ -548,12 +472,12 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
         involvement_stats[group] = stats_by_stage
         involvement_data[group] = involvement_by_stage
 
-    print("\nOverall Involvement Statistics by Treatment Group (All Protos Combined):")
+    logging.info("\nOverall Involvement Statistics by Treatment Group (All Protos Combined):")
     for group in groups:
-        print(f"\n{group} Group:")
+        logging.info(f"\n{group} Group:")
         for stage in stages:
             sdata = involvement_stats[group][stage]
-            print(f"  {stage.capitalize()}: {sdata['mean']:.1f}% ± {sdata['std']:.1f}% (n={sdata['count']})")
+            logging.info(f"  {stage.capitalize()}: {sdata['mean']:.1f}% ± {sdata['std']:.1f}% (n={sdata['count']})")
 
     # Perform statistical tests comparing involvement
     involvement_comparison_tests = []
@@ -572,12 +496,12 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
                         'P_Value': p_val,
                         'Significant': p_val < 0.05
                     })
-                    print(f"\nMann-Whitney U Test for overall {stage} involvement (Active vs SHAM): "
+                    logging.info(f"\nMann-Whitney U Test for overall {stage} involvement (Active vs SHAM): "
                           f"U={u_stat:.2f}, p={p_val:.4f}")
                     if p_val < 0.05:
-                        print(f"Significant difference detected in overall {stage} involvement between Active and SHAM groups.")
+                        logging.info(f"Significant difference detected in overall {stage} involvement between Active and SHAM groups.")
                 except Exception as e:
-                    print(f"Error performing statistical test for overall {stage} involvement: {str(e)}")
+                    logging.error(f"Error performing statistical test for overall {stage} involvement: {str(e)}")
 
     # Calculate origin data
     origin_data = {}
@@ -593,28 +517,25 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
             }
         origin_data[group] = origin_by_stage
 
-    print("\nOverall Origin Distribution by Treatment Group (All Protos Combined):")
+    logging.info("\nOverall Origin Distribution by Treatment Group (All Protos Combined):")
     for group in groups:
-        print(f"\n{group} Group:")
+        logging.info(f"\n{group} Group:")
         for stage in stages:
             rc = origin_data[group][stage]['region_counts']
             tw = origin_data[group][stage]['total_waves']
             if rc and tw > 0:
-                print(f"  {stage.capitalize()} (n={tw} waves):")
-                # Filter or show top 10
-                # But user wants to see partial. We'll keep the top 10 approach:
-                # We'll also combine "Other" if below threshold, etc.
-                # For simplicity, just show top 10 by count
+                logging.info(f"  {stage.capitalize()} (n={tw} waves):")
+                # Show top 10 by count
                 region_counts_sorted = sorted(rc.items(), key=lambda x: x[1], reverse=True)
                 displayed = 0
                 for (region, count) in region_counts_sorted:
                     if displayed >= 10:
                         break
                     percentage = (count / tw) * 100
-                    print(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
+                    logging.info(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
                     displayed += 1
             else:
-                print(f"  {stage.capitalize()}: No origins detected")
+                logging.info(f"  {stage.capitalize()}: No origins detected")
 
     # Perform statistical tests on origin distribution
     origin_comparison_tests = []
@@ -637,13 +558,13 @@ def analyze_overall_treatment_comparison(results_by_treatment_group, master_regi
                         origin_comparison_tests.append(test_result)
 
                         if 'DF' in test_result:
-                            print(f"\n{test_result['Test']} for overall {stage} origin distribution (Active vs SHAM): "
+                            logging.info(f"\n{test_result['Test']} for overall {stage} origin distribution (Active vs SHAM): "
                                   f"χ²={test_result['Statistic']:.2f}, df={test_result['DF']}, p={test_result['P_Value']:.4f}")
                         else:
-                            print(f"\n{test_result['Test']} for overall {stage} origin distribution (Active vs SHAM): "
+                            logging.info(f"\n{test_result['Test']} for overall {stage} origin distribution (Active vs SHAM): "
                                   f"p={test_result['P_Value']:.4f}")
                         if test_result['Significant']:
-                            print(f"Significant difference detected in overall {stage} origin distribution "
+                            logging.info(f"Significant difference detected in overall {stage} origin distribution "
                                   f"between Active and SHAM groups.")
 
     return {
@@ -659,7 +580,7 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
     """
     Perform proto-specific comparison between treatment groups for each proto.
     """
-    print("\n=== Proto-Specific Comparison ===")
+    logging.info("\n=== Proto-Specific Comparison ===")
     # Gather all protocols correctly
     all_protocols = set()
     for group in results_by_treatment_group:
@@ -686,7 +607,7 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
 
     # Ensure the main loop iterates through PROTOCOLS, not subjects or other keys
     for protocol in sorted(list(all_protocols)): # Explicitly sort the list of protocols
-        print(f"\n--- Analysis for {protocol} ---")
+        logging.info(f"\n--- Analysis for {protocol} ---")
 
         # Check if at least two groups have data for this specific protocol
         groups_with_data_for_protocol = []
@@ -700,7 +621,7 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
                 groups_with_data_for_protocol.append(group)
 
         if len(groups_with_data_for_protocol) < 2:
-            print(f"Skipping {protocol} - not enough treatment groups with data for this protocol.")
+            logging.warning(f"Skipping {protocol} - not enough treatment groups with data for this protocol.")
             continue
 
         # Collect waves for each group, for this specific protocol, aggregating across subjects
@@ -725,12 +646,12 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
                 stage: [res['involvement_percentage'] for res in waves_by_group[group].get(stage, []) if isinstance(res, dict)]
                 for stage in stages
             }
-            # Check if any non-dict items were skipped and print a warning
+            # Check if any non-dict items were skipped and log a warning
             for stage in stages:
                 original_count = len(waves_by_group[group].get(stage, []))
                 processed_count = len(involvement_by_stage.get(stage, []))
                 if original_count != processed_count:
-                    print(f"Warning in analyze_proto_specific_comparison ({protocol}, {group}, {stage}): Skipped {original_count - processed_count} non-dictionary items during involvement calculation.")
+                    logging.warning(f"In analyze_proto_specific_comparison ({protocol}, {group}, {stage}): Skipped {original_count - processed_count} non-dictionary items during involvement calculation.")
 
             stats_by_stage = {
                 stage: calculate_involvement_statistics(involvement_by_stage[stage])
@@ -739,11 +660,11 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
             involvement_stats[group] = stats_by_stage
             involvement_data[group] = involvement_by_stage
 
-        print(f"\nInvolvement Statistics for {protocol} by Treatment Group:")
+        logging.info(f"\nInvolvement Statistics for {protocol} by Treatment Group:")
         for group in waves_by_group:
-            print(f"\n{group} Group:")
+            logging.info(f"\n{group} Group:")
             for stage, stats in involvement_stats[group].items():
-                print(f"  {stage.capitalize()}: {stats['mean']:.1f}% ± {stats['std']:.1f}% (n={stats['count']})")
+                logging.info(f"  {stage.capitalize()}: {stats['mean']:.1f}% ± {stats['std']:.1f}% (n={stats['count']})")
 
         # Statistical tests between groups
         involvement_comparison_tests = []
@@ -763,12 +684,12 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
                             'P_Value': p_val,
                             'Significant': p_val < 0.05
                         })
-                        print(f"\nMann-Whitney U Test for {stage} involvement in {protocol} (Active vs SHAM): "
+                        logging.info(f"\nMann-Whitney U Test for {stage} involvement in {protocol} (Active vs SHAM): "
                               f"U={u_stat:.2f}, p={p_val:.4f}")
                         if p_val < 0.05:
-                            print(f"Significant difference detected in {stage} involvement between Active and SHAM groups for {protocol}.")
+                            logging.info(f"Significant difference detected in {stage} involvement between Active and SHAM groups for {protocol}.")
                     except Exception as e:
-                        print(f"Error performing statistical test for {stage} involvement in {protocol}: {str(e)}")
+                        logging.error(f"Error performing statistical test for {stage} involvement in {protocol}: {str(e)}")
 
         # Origin data
         origin_data = {}
@@ -784,25 +705,25 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
                 }
             origin_data[group] = origin_by_stage
 
-        print(f"\nOrigin Distribution for {protocol} by Treatment Group:")
+        logging.info(f"\nOrigin Distribution for {protocol} by Treatment Group:")
         for group in waves_by_group:
-            print(f"\n{group} Group:")
+            logging.info(f"\n{group} Group:")
             for stage, data_dict in origin_data[group].items():
                 rc = data_dict['region_counts']
                 tw = data_dict['total_waves']
                 if rc and tw > 0:
-                    print(f"  {stage.capitalize()} (n={tw} waves):")
-                    # Filter or show top 5
+                    logging.info(f"  {stage.capitalize()} (n={tw} waves):")
+                    # Show top 5
                     region_counts_sorted = sorted(rc.items(), key=lambda x: x[1], reverse=True)
                     displayed = 0
                     for (region, count) in region_counts_sorted:
                         if displayed >= 5:
                             break
                         percentage = (count / tw) * 100
-                        print(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
+                        logging.info(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
                         displayed += 1
                 else:
-                    print(f"  {stage.capitalize()}: No origins detected")
+                    logging.info(f"  {stage.capitalize()}: No origins detected")
 
         # Statistical tests on origin distribution
         origin_comparison_tests = []
@@ -826,14 +747,14 @@ def analyze_proto_specific_comparison(results_by_treatment_group, master_region_
                             origin_comparison_tests.append(test_result)
 
                             if 'DF' in test_result:
-                                print(f"\n{test_result['Test']} for {stage} origin distribution in {protocol} "
+                                logging.info(f"\n{test_result['Test']} for {stage} origin distribution in {protocol} "
                                       f"(Active vs SHAM): χ²={test_result['Statistic']:.2f}, df={test_result['DF']}, "
                                       f"p={test_result['P_Value']:.4f}")
                             else:
-                                print(f"\n{test_result['Test']} for {stage} origin distribution in {protocol} "
+                                logging.info(f"\n{test_result['Test']} for {stage} origin distribution in {protocol} "
                                       f"(Active vs SHAM): p={test_result['P_Value']:.4f}")
                             if test_result['Significant']:
-                                print(f"Significant difference detected in {stage} origin distribution between Active and SHAM groups for {protocol}.")
+                                logging.info(f"Significant difference detected in {stage} origin distribution between Active and SHAM groups for {protocol}.")
 
         proto_specific_results[protocol] = {
             'involvement_data': involvement_data,
@@ -853,7 +774,7 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
     """
     Perform within-group stage comparison for each treatment group.
     """
-    print("\n=== Within-Group Stage Comparison ===")
+    logging.info("\n=== Within-Group Stage Comparison ===")
 
     # Collect all possible stages across all groups, subjects, and protocols
     all_stages = set()
@@ -874,12 +795,12 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
 
     within_group_results = {}
     for group in results_by_treatment_group:
-        print(f"\n--- Analysis for {group} Group ---")
+        logging.info(f"\n--- Analysis for {group} Group ---")
 
         group_data = results_by_treatment_group[group]
         subjects = list(group_data.keys())
         if not subjects:
-            print(f"No subjects found for {group} group.")
+            logging.warning(f"No subjects found for {group} group.")
             continue
 
         # --- Prepare Paired Involvement Data ---
@@ -901,10 +822,10 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
         # Determine which subjects have data for all relevant stages
         stages_with_data = [s for s in stages if any(subject_stage_involvement[subj][s] for subj in subjects)]
         if len(stages_with_data) < 2:
-             print(f"Not enough stages with data for paired comparison in {group} group.")
+             logging.warning(f"Not enough stages with data for paired comparison in {group} group.")
              # Continue to origin analysis, skip involvement tests
         else:
-            print(f"Preparing paired data for stages: {', '.join(stages_with_data)}")
+            logging.info(f"Preparing paired data for stages: {', '.join(stages_with_data)}")
             for subject in subjects:
                 has_all_stages = True
                 subject_averages = {}
@@ -921,7 +842,7 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
                     for stage in stages_with_data:
                         paired_involvement_data[stage].append(subject_averages[stage])
 
-            print(f"Found {len(valid_subjects_for_pairing)} subjects with complete data across stages for paired tests.")
+            logging.info(f"Found {len(valid_subjects_for_pairing)} subjects with complete data across stages for paired tests.")
 
             # --- Perform Paired Statistical Tests on Involvement ---
             involvement_test_results = []
@@ -934,40 +855,40 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
                     friedman_result = perform_friedman_test(*friedman_data_input)
                     if friedman_result:
                         involvement_test_results.append(friedman_result)
-                        print(f"\nFriedman Test for Involvement in {group} Group: "
+                        logging.info(f"\nFriedman Test for Involvement in {group} Group: "
                               f"Statistic={friedman_result['Statistic']:.2f}, p={friedman_result['P_Value']:.4f}")
                         if friedman_result['Significant']:
-                            print(f"Significant differences detected in involvement between stages for {group} Group.")
+                            logging.info(f"Significant differences detected in involvement between stages for {group} Group.")
                             # Perform post-hoc Wilcoxon only if Friedman is significant
-                            print("\nPost-hoc Wilcoxon Signed-Rank Tests (FDR corrected):")
+                            logging.info("\nPost-hoc Wilcoxon Signed-Rank Tests (FDR corrected):")
                             wilcoxon_results = perform_wilcoxon_posthoc(friedman_data_input, stages_with_data)
                             involvement_test_results.extend(wilcoxon_results)
                             for res in wilcoxon_results:
-                                print(f"  {res['Metric'].split(': ')[1]}: p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
+                                logging.info(f"  {res['Metric'].split(': ')[1]}: p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
                         else:
-                             print("Friedman test not significant, skipping post-hoc tests.")
+                             logging.info("Friedman test not significant, skipping post-hoc tests.")
                     else:
-                        print("Could not perform Friedman test.")
+                        logging.warning("Could not perform Friedman test.")
                 # Wilcoxon Test (if exactly 2 stages)
                 elif len(stages_with_data) == 2:
-                     print("\nPerforming Wilcoxon Signed-Rank Test (only 2 stages):")
+                     logging.info("\nPerforming Wilcoxon Signed-Rank Test (only 2 stages):")
                      wilcoxon_results = perform_wilcoxon_posthoc(friedman_data_input, stages_with_data)
                      involvement_test_results.extend(wilcoxon_results)
                      for res in wilcoxon_results:
-                         print(f"  {res['Metric'].split(': ')[1]}: Stat={res['Statistic']:.2f}, p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
+                         logging.info(f"  {res['Metric'].split(': ')[1]}: Stat={res['Statistic']:.2f}, p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
                 else:
-                    print("Not enough stages for comparison.")
+                    logging.warning("Not enough stages for comparison.")
 
             else:
-                print(f"Not enough subjects ({len(valid_subjects_for_pairing)}) with complete data across stages for paired tests in {group} group.")
+                logging.warning(f"Not enough subjects ({len(valid_subjects_for_pairing)}) with complete data across stages for paired tests in {group} group.")
 
             if not involvement_test_results:
-                 print(f"No paired statistical tests performed for involvement in {group} Group.")
+                 logging.info(f"No paired statistical tests performed for involvement in {group} Group.")
 
 
         # --- Calculate Descriptive Involvement Stats (using all available data per stage) ---
         involvement_stats = {}
-        print(f"\nOverall Involvement Statistics for {group} Group (Descriptive):")
+        logging.info(f"\nOverall Involvement Statistics for {group} Group (Descriptive):")
         for stage in stages:
             # Aggregate all scores for this stage across all subjects and protocols
             all_stage_scores = []
@@ -975,12 +896,12 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
                  all_stage_scores.extend(subject_stage_involvement[subject][stage])
             involvement_stats[stage] = calculate_involvement_statistics(all_stage_scores)
             stats = involvement_stats[stage]
-            print(f"  {stage.capitalize()}: {stats['mean']:.1f}% ± {stats['std']:.1f}% (n={stats['count']})")
+            logging.info(f"  {stage.capitalize()}: {stats['mean']:.1f}% ± {stats['std']:.1f}% (n={stats['count']})")
 
 
         # --- Calculate Origin Data (Aggregated across subjects for the group) ---
         origin_data = {}
-        print(f"\nAggregated Origin Statistics for {group} Group:")
+        logging.info(f"\nAggregated Origin Statistics for {group} Group:")
         for stage in stages:
             all_stage_origins = []
             # Aggregate origins across all subjects/protocols for this group/stage
@@ -1002,7 +923,7 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
             rc = data_dict['region_counts']
             tw = data_dict['total_waves']
             if rc and tw > 0:
-                print(f"  {stage.capitalize()} (n={tw} waves):")
+                logging.info(f"  {stage.capitalize()} (n={tw} waves):")
                 ordered_regions = [r for r in master_region_list if r in rc]
                 displayed = 0
                 for region in ordered_regions:
@@ -1010,10 +931,10 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
                         break
                     count = rc[region]
                     percentage = (count / tw) * 100
-                    print(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
+                    logging.info(f"    {region}: {count}/{tw} waves ({percentage:.1f}%)")
                     displayed += 1
             else:
-                print(f"  {stage.capitalize()}: No origins detected")
+                logging.info(f"  {stage.capitalize()}: No origins detected")
 
         # Perform stats on origin distribution (comparing stages within the group)
         # This uses the aggregated origin counts per stage for the group
@@ -1021,16 +942,16 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
 
         for result in origin_test_results:
             if 'DF' in result:
-                print(f"\n{result['Test']} for Origin Distribution in {group} Group: "
+                logging.info(f"\n{result['Test']} for Origin Distribution in {group} Group: "
                       f"χ²={result['Statistic']:.2f}, df={result['DF']}, p={result['P_Value']:.4f}")
             else:
-                print(f"\n{result['Test']} for Origin Distribution in {group} Group: "
+                logging.info(f"\n{result['Test']} for Origin Distribution in {group} Group: "
                       f"p={result['P_Value']:.4f}")
             if result['Significant']:
-                print(f"Significant differences detected in origin distribution between stages for {group} Group.")
+                logging.info(f"Significant differences detected in origin distribution between stages for {group} Group.")
 
         if not origin_test_results:
-            print(f"\nNot enough data for statistical test of origin distribution in {group} Group.")
+            logging.warning(f"\nNot enough data for statistical test of origin distribution in {group} Group.")
 
         within_group_results[group] = {
             # 'involvement_data' now refers to the paired data structure if needed later,
