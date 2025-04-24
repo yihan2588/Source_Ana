@@ -11,13 +11,6 @@ from utils import extract_region_name
 
 # Removed visualize_results function as requested
 
-def visualize_treatment_comparison(treatment_comparison_results):
-    """
-    Create visualizations comparing treatment groups (Active vs. SHAM).
-    Currently minimal since the detailed plots are in the new overall functions.
-    """
-    pass
-
 def create_involvement_boxplot(data, labels, title, filename, colors=None):
     """
     Create a boxplot for involvement data.
@@ -42,74 +35,6 @@ def create_involvement_boxplot(data, labels, title, filename, colors=None):
     plt.savefig(filename)
     logging.info(f"Saved involvement boxplot as '{filename}'")
     plt.close()
-
-
-def create_involvement_summary(all_results, protocols):
-    """
-    Create a summary bar chart of involvement across stages for each protocol.
-    """
-    protocols_list = []
-    stages_list = []
-    means = []
-    errors = []
-    
-    # Get all stages across all protocols
-    all_stages = set()
-    for protocol in protocols:
-        all_stages.update(all_results[protocol].keys())
-    
-    # Determine standard stage order if possible
-    if all_stages == {'pre', 'early', 'late', 'post'}:
-        stages = ['pre', 'early', 'late', 'post']  # 4-stage scheme
-    elif all_stages == {'pre', 'stim', 'post'}:
-        stages = ['pre', 'stim', 'post']  # 3-stage scheme
-    else:
-        stages = sorted(all_stages)  # fallback to alphabetical order
-
-    for protocol in protocols:
-        for stage in stages:
-            if stage in all_results[protocol] and all_results[protocol][stage]:
-                protocols_list.append(protocol)
-                stages_list.append(stage)
-                data = [res['involvement_percentage'] for res in all_results[protocol][stage]]
-                means.append(np.mean(data) if data else 0)
-                errors.append(np.std(data) if len(data) > 1 else 0)
-
-    summary_df = pd.DataFrame({
-        'Protocol': protocols_list,
-        'Stage': stages_list,
-        'Mean': means,
-        'Error': errors
-    })
-
-    if not summary_df.empty:
-        plt.figure(figsize=(12, 6))
-        stage_colors = {'pre': 'skyblue', 'early': 'lightgreen', 'late': 'salmon', 'post': 'gold', 'stim': 'purple'}
-
-        for protocol in protocols:
-            proto_data = summary_df[summary_df['Protocol'] == protocol]
-            if not proto_data.empty:
-                for _, row in proto_data.iterrows():
-                    plt.bar(row['Protocol'] + '_' + row['Stage'],
-                            row['Mean'],
-                            yerr=row['Error'],
-                            color=stage_colors[row['Stage']],
-                            label=row['Stage']
-                            if row['Stage'] not in plt.gca().get_legend_handles_labels()[1] else '')
-
-        plt.title('Mean Involvement Percentage by Protocol and Stage')
-        plt.ylabel('Involvement (%)')
-        plt.xlabel('Protocol and Stage')
-        plt.xticks(rotation=45)
-
-        handles, labels = plt.gca().get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        plt.legend(by_label.values(), by_label.keys(), title='Stage')
-
-        plt.tight_layout()
-        plt.savefig('involvement_summary.png')
-        logging.info("Saved involvement summary as 'involvement_summary.png'")
-        plt.close()
 
 
 def create_origin_stage_comparison_barplot(origin_data,
@@ -1071,14 +996,11 @@ def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Remove
                 # Plot the time series
                 plt.plot(window_times, time_series, label=region)
                 
-                # Find local maxima
-                maxima_indices = []
-                for i in range(1, len(time_series)-1):
-                    if time_series[i] > time_series[i-1] and time_series[i] > time_series[i+1]:
-                        maxima_indices.append(i)
+                # Find local maxima using scipy.signal.find_peaks
+                maxima_indices, _ = find_peaks(time_series)
                 
                 # Mark local maxima with blue dots
-                if maxima_indices:
+                if maxima_indices.size > 0: # Check if any peaks were found
                     max_times = window_times[maxima_indices]
                     max_values = time_series[maxima_indices]
                     plt.scatter(max_times, max_values, color='blue', s=30, zorder=3)

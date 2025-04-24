@@ -59,26 +59,6 @@ def calculate_involvement_statistics(involvement_data):
     }
 
 
-def collect_wave_level_data(results_by_protocol):
-    """
-    Collect wave-level data across all protocols (for single-group usage).
-    """
-    # Get all available stages across all protocols
-    all_stages = set()
-    for protocol in results_by_protocol:
-        all_stages.update(results_by_protocol[protocol].keys())
-    
-    # Initialize consolidated data with all found stages
-    consolidated_data = {stage: [] for stage in all_stages}
-    
-    # Collect data for each stage
-    for protocol in results_by_protocol:
-        for stage in all_stages:
-            if stage in results_by_protocol[protocol]:
-                consolidated_data[stage].extend(results_by_protocol[protocol][stage])
-    return consolidated_data
-
-
 def collect_data_by_treatment_group(results_by_treatment_group):
     """
     Collect wave-level data across all protocols for each treatment group.

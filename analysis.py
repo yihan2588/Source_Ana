@@ -76,12 +76,14 @@ from stats_utils import (
 )
 # Keep scipy stats import for Mann-Whitney U (group comparisons)
 from scipy import stats as scipy_stats
+from scipy.signal import find_peaks # Added for peak detection
 from visualize import visualize_region_time_series, plot_voxel_waveforms
 
 
-def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=True):
+def analyze_slow_wave(df, wave_name, threshold_percent=25):
     """
     Analyze a single slow wave CSV file to extract origin and involvement metrics.
+    Uses a fixed window of -50ms to +50ms.
     """
     # Debug logging can be controlled by setting the logger level if needed
     # logging.debug(f"\nAnalyzing {wave_name}...")
@@ -124,24 +126,32 @@ def analyze_slow_wave(df, wave_name, window_ms=100, threshold_percent=25, debug=
     voxel_peak_times = []
     involved_voxels = []
 
-    for voxel_idx in range(len(data)):
+    for voxel_idx in range(len(data)): # Corrected indentation
         if voxel_idx < window_data.shape[0]:
             voxel_data = window_data[voxel_idx]
-            peaks = []
-            for i in range(1, len(voxel_data)-1):
-                if voxel_data[i] > voxel_data[i-1] and voxel_data[i] > voxel_data[i+1]:
-                    if voxel_data[i] > threshold:
-                        peaks.append((window_times[i], voxel_data[i]))
+            
+            # Use scipy.signal.find_peaks
+            peak_indices, _ = find_peaks(voxel_data, height=threshold)
+            peaks_above_threshold = []
+            if peak_indices.size > 0:
+                # Get the times and values for the found peaks
+                peak_times = window_times[peak_indices]
+                peak_values = voxel_data[peak_indices]
+                peaks_above_threshold = list(zip(peak_times, peak_values))
 
-            if peaks:
-                first_peak_time = min(peaks, key=lambda x: x[0])[0]
+            if peaks_above_threshold:
+                # Find the peak that occurred earliest in time
+                first_peak = min(peaks_above_threshold, key=lambda x: x[0])
+                first_peak_time = first_peak[0]
+                # first_peak_value = first_peak[1] # Value is available if needed
+
                 region = extract_region_name(voxel_names[voxel_idx])
                 voxel_peak_times.append({
-                    'full_name': voxel_names[voxel_idx],
-                    'region': region,
-                    'peak_time': first_peak_time
-                })
-                involved_voxels.append(voxel_names[voxel_idx])
+                'full_name': voxel_names[voxel_idx],
+                'region': region,
+                'peak_time': first_peak_time
+            })
+            involved_voxels.append(voxel_names[voxel_idx])
 
     total_voxels = len(data)
     num_involved = len(involved_voxels)
@@ -332,7 +342,8 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
             try:
                 df = pd.read_csv(csv_file)
                 wave_name = csv_file.stem
-                result = analyze_slow_wave(df, wave_name, debug=False)
+                # Call analyze_slow_wave without the debug argument
+                result = analyze_slow_wave(df, wave_name) 
                 # Validate, log, and save wave result information
                 validate_wave_result(result, csv_file) # Handles logging internally
 
