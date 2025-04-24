@@ -48,7 +48,7 @@ def validate_wave_result(result, csv_file_path=None):
     # Add window and threshold information
     window = result.get('window', (0, 0))
     threshold = result.get('threshold', 0)
-    validation_lines.append(f"[VALIDATION] Window: {window[0]}ms to {window[1]}ms, Threshold: {threshold:.6f}")
+    validation_lines.append(f"[VALIDATION] Window: {window[0]}ms to {window[1]}ms, Threshold: {threshold:.10e}")
     validation_lines.append("[VALIDATION] ------------------------------")
 
     # Log to main pipeline log
@@ -150,8 +150,8 @@ def analyze_slow_wave(df, wave_name, threshold_percent=25):
                 'full_name': voxel_names[voxel_idx],
                 'region': region,
                 'peak_time': first_peak_time
-            })
-            involved_voxels.append(voxel_names[voxel_idx])
+                })
+                involved_voxels.append(voxel_names[voxel_idx]) # Indented this line
 
     total_voxels = len(data)
     num_involved = len(involved_voxels)
@@ -343,7 +343,7 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
                 df = pd.read_csv(csv_file)
                 wave_name = csv_file.stem
                 # Call analyze_slow_wave without the debug argument
-                result = analyze_slow_wave(df, wave_name) 
+                result = analyze_slow_wave(df, wave_name)
                 # Validate, log, and save wave result information
                 validate_wave_result(result, csv_file) # Handles logging internally
 
