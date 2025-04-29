@@ -117,9 +117,16 @@ def analyze_slow_wave(df, wave_name, threshold_percent=25):
     window_data = data[:, window_mask]
     window_times = time_points[window_mask]
 
+    global_max_value = 0
+    global_max_time = np.nan # Use NaN if no data
     if window_data.size > 0:
         max_current = np.max(window_data)
         threshold = max_current * (threshold_percent / 100)
+        # Find the time of the global maximum within the window
+        flat_idx = np.argmax(window_data)
+        voxel_idx_max, time_idx_max = np.unravel_index(flat_idx, window_data.shape)
+        global_max_time = window_times[time_idx_max]
+        global_max_value = max_current # This is the value
     else:
         threshold = 0
 
@@ -178,7 +185,9 @@ def analyze_slow_wave(df, wave_name, threshold_percent=25):
         'involvement_percentage': involvement_percentage,
         'involved_voxels': involved_voxels,
         'window': (window_start, window_end),
-        'threshold': threshold
+        'threshold': threshold,
+        'global_max_value': global_max_value,
+        'global_max_time': global_max_time
     }
 
 
@@ -354,8 +363,8 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
                 if visualize_regions:
                     # Use source_dir if provided, otherwise use the standard 'results' directory
                     visualize_region_time_series(result, csv_file, source_dir=source_dir) # output_dir handled internally
-                    # Add the new call for voxel waveforms
-                    plot_voxel_waveforms(csv_file, wave_name, source_dir=source_dir) # output_dir handled internally
+                    # Pass the full result dict (wave_data) to plot_voxel_waveforms
+                    plot_voxel_waveforms(result, csv_file, source_dir=source_dir) # output_dir handled internally
 
                 # logging.info(f"Processed {filename} - Protocol: {protocol}, Stage: {stage}") # Logged by validate_wave_result
             except Exception as e:

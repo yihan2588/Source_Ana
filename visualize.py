@@ -627,13 +627,13 @@ def visualize_overall_treatment_comparison(overall_comparison_results, source_di
              )
 
 
-def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, source_dir=None): # Removed output_dir
+def plot_voxel_waveforms(wave_data, csv_file, num_voxels=3, source_dir=None): # Removed output_dir
     """
-    Visualize the time series data for a few randomly selected voxels.
+    Visualize the time series data for a few randomly selected voxels, applying threshold.
 
     Args:
+        wave_data: Dictionary containing wave analysis results (includes threshold and wave_name)
         csv_file: Path to the original CSV file containing the time series data
-        wave_name: Name of the wave file (for titling and saving)
         num_voxels: Number of random voxels to plot
         source_dir: Source directory where the data is read from, used to construct the output path
 
@@ -641,8 +641,8 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, source_dir=None): # 
     1. Loads the CSV data.
     2. Randomly selects `num_voxels` voxels.
     3. Plots the time series waveform for each selected voxel in a separate subplot.
-    4. Uses scipy.signal.find_peaks to find local maxima.
-    5. Marks local maxima with blue dots.
+    4. Uses scipy.signal.find_peaks with the provided threshold to find local maxima.
+    5. Marks local maxima above threshold with blue dots.
     6. Saves the figure to a structured directory.
     """
     # Define base output directory structure
@@ -653,6 +653,9 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, source_dir=None): # 
     # Extract protocol and stage from the wave name for directory structure
     protocol = "unknown"
     stage = "unknown"
+    # Extract wave_name and threshold from wave_data
+    wave_name = wave_data.get('wave_name', 'unknown_wave')
+    threshold = wave_data.get('threshold', 0) # Get threshold from analysis results
     protocol_match = re.search(r'(proto\d+)', wave_name, re.IGNORECASE)
     stage_match = re.search(r'(pre|early|late|post|stim)(?:-stim)?', wave_name, re.IGNORECASE)
     if protocol_match:
@@ -706,8 +709,8 @@ def plot_voxel_waveforms(csv_file, wave_name, num_voxels=3, source_dir=None): # 
             voxel_data = data[voxel_idx, :]
             voxel_name = voxel_names[voxel_idx]
 
-            # Find peaks
-            peaks_indices, _ = find_peaks(voxel_data)
+            # Find peaks using the threshold from analysis
+            peaks_indices, _ = find_peaks(voxel_data, height=threshold)
 
             # Plot waveform
             axs[i].plot(time_points, voxel_data, label=f'Voxel {voxel_idx}')
@@ -904,18 +907,21 @@ def visualize_proto_specific_comparison(proto_specific_results, source_dir=None)
 
 def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Removed output_dir
     """
-    Visualize the time series data for each brain region.
+    Visualize the time series data for each brain region, applying threshold.
+    Overlays individual voxel peaks and origins onto the averaged region curves.
 
     Args:
-        wave_data: Dictionary containing the results from analyze_slow_wave
+        wave_data: Dictionary containing the results from analyze_slow_wave (includes threshold)
         csv_file: Path to the original CSV file containing the time series data
         source_dir: Source directory where the data is read from, used to construct the output path
 
     This function:
-    1. Groups voxels by region
-    2. Plots time series data for each region (-50ms to 50ms)
-    3. Marks local maxima with blue dots
-    4. Marks origins with red dots
+    1. Groups voxels by region.
+    2. Plots averaged time series data for each region (-50ms to 50ms).
+    3. Finds peaks for each *individual* voxel.
+    4. Marks all individual voxel local maxima above threshold with blue dots (interpolated onto region curve).
+    5. Marks the *first* individual voxel local maximum with a green circle (interpolated onto region curve).
+    6. Marks origins (from wave_data) with red stars (interpolated onto region curve).
     """
     # Define base output directory structure
     base_output_dir = "results"
@@ -926,8 +932,9 @@ def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Remove
     protocol = "unknown"
     stage = "unknown"
     
-    # Extract protocol and stage from the wave name
-    wave_name = wave_data["wave_name"]
+    # Extract protocol, stage, and threshold from the wave name
+    wave_name = wave_data.get("wave_name", "unknown_wave")
+    threshold = wave_data.get("threshold", 0) # Get threshold from analysis results
     protocol_match = re.search(r'(proto\d+)', wave_name, re.IGNORECASE)
     stage_match = re.search(r'(pre|early|late|post|stim)(?:-stim)?', wave_name, re.IGNORECASE)
     
@@ -986,56 +993,100 @@ def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Remove
                 region_time_series[region] = region_data
             
             # Create a figure for all regions
-            plt.figure(figsize=(10, 8))
+            plt.figure(figsize=(12, 8)) # Increased figure size slightly
             
-            # Store local maxima for each region with more details
-            region_maxima = {}
-            
-            # Plot time series for each region
+            # Plot time series for each region and overlay voxel-level peaks
+            # Add legend handles for custom markers
+            legend_handles = []
+            legend_labels = []
+            origin_label_added = False
+            first_peak_label_added = False
+            local_max_label_added = False
+
+            # Plot averaged region curves first
             for region, time_series in region_time_series.items():
-                # Plot the time series
-                plt.plot(window_times, time_series, label=region)
-                
-                # Find local maxima using scipy.signal.find_peaks
-                maxima_indices, _ = find_peaks(time_series)
-                
-                # Mark local maxima with blue dots
-                if maxima_indices.size > 0: # Check if any peaks were found
-                    max_times = window_times[maxima_indices]
-                    max_values = time_series[maxima_indices]
-                    plt.scatter(max_times, max_values, color='blue', s=30, zorder=3)
-                    
-                    # Store local maxima info in a more structured way
-                    region_maxima[region] = {
-                        'indices': maxima_indices,
-                        'times': max_times,
-                        'values': max_values
-                    }
-            
-            # Mark origins with red stars, ensuring they align with local maxima
+                line, = plt.plot(window_times, time_series, label=region)
+                # Store line handle for legend later if needed, but default legend might be okay
+
+            # Now, overlay voxel-level peaks onto the averaged curves
+            for region, time_series in region_time_series.items():
+                # Iterate through voxels belonging to this region
+                if region in region_voxels:
+                    for voxel_idx in region_voxels[region]:
+                        voxel_data = window_data[voxel_idx, :]
+
+                        # Find local maxima for this specific voxel
+                        voxel_maxima_indices, _ = find_peaks(voxel_data, height=threshold)
+
+                        if voxel_maxima_indices.size > 0:
+                            voxel_max_times = window_times[voxel_maxima_indices]
+                            # Get y-value from the region's averaged curve for plotting
+                            voxel_max_values_on_region_curve = np.interp(voxel_max_times, window_times, time_series)
+
+                            # Mark all local maxima for this voxel with blue dots
+                            scatter_local = plt.scatter(voxel_max_times, voxel_max_values_on_region_curve,
+                                                        color='blue', s=15, zorder=3, alpha=0.6,
+                                                        label='_nolegend_') # Use _nolegend_ initially
+                            if not local_max_label_added:
+                                # Create proxy for legend
+                                proxy_local = plt.Line2D([0], [0], linestyle='none', marker='o', markersize=4, color='blue', alpha=0.6)
+                                legend_handles.append(proxy_local)
+                                legend_labels.append('Voxel Local Max')
+                                local_max_label_added = True
+
+                            # Mark the first local maximum for this voxel with a green circle
+                            first_idx = np.argmin(voxel_max_times)
+                            first_time = voxel_max_times[first_idx]
+                            first_value_on_region_curve = voxel_max_values_on_region_curve[first_idx]
+                            scatter_first = plt.scatter(first_time, first_value_on_region_curve,
+                                                        facecolors='none', edgecolors='green',
+                                                        s=40, linewidths=1.5, marker='o', zorder=4,
+                                                        label='_nolegend_') # Use _nolegend_ initially
+                            if not first_peak_label_added:
+                                # Create a proxy artist for the legend
+                                proxy_first = plt.Line2D([0], [0], linestyle='none', marker='o', markersize=6,
+                                                         markerfacecolor='none', markeredgecolor='green', markeredgewidth=1.5)
+                                legend_handles.append(proxy_first)
+                                legend_labels.append('Voxel First Peak')
+                                first_peak_label_added = True
+
+            # Mark origins with red stars on the corresponding region's curve
             if 'origins' in wave_data and not wave_data['origins'].empty:
                 for _, row in wave_data['origins'].iterrows():
-                    region = row['region']
+                    origin_region = row['region']
                     origin_time = row['peak_time']
-                    
-                    if region in region_maxima and len(region_maxima[region]['times']) > 0:
-                        # Find the closest local maximum to the origin time
-                        local_max_times = region_maxima[region]['times']
-                        local_max_values = region_maxima[region]['values']
-                        closest_idx = np.argmin(np.abs(local_max_times - origin_time))
-                        closest_max_time = local_max_times[closest_idx]
-                        closest_max_value = local_max_values[closest_idx]
-                        
-                        # Check if the closest local maximum is within a reasonable time window (e.g., 5ms)
-                        if abs(closest_max_time - origin_time) <= 5:  # 5ms tolerance
-                            # Plot the origin at the actual local maximum
-                            plt.scatter(closest_max_time, closest_max_value,
-                                       color='red', s=50, marker='*', zorder=4)
-                        else:
-                            logging.warning(f"No local maximum found near origin time {origin_time:.2f}ms "
-                                  f"for region {region} in wave {wave_name} within ±5ms window")
-                    else:
-                        logging.warning(f"No local maxima detected for origin region {region} in wave {wave_name}")
+
+                    # Check if this origin's region is being plotted
+                    if origin_region in region_time_series:
+                        # Get the y-value from the region's averaged curve at the origin time
+                        origin_y_value = np.interp(origin_time, window_times, region_time_series[origin_region])
+
+                        # Plot the origin marker
+                        scatter_origin = plt.scatter(origin_time, origin_y_value,
+                                                     color='red', s=60, marker='*', zorder=5,
+                                                     label='_nolegend_') # Use _nolegend_ initially
+                        if not origin_label_added:
+                            legend_handles.append(scatter_origin)
+                            legend_labels.append('Origin')
+                            origin_label_added = True
+                    # else: # Optional: Log if an origin region isn't in the plot (e.g., due to averaging?)
+                    #    logging.debug(f"Origin region '{origin_region}' not found in region_time_series for plotting.")
+
+            # Mark the global maximum used for threshold calculation
+            global_max_time = wave_data.get('global_max_time', np.nan)
+            global_max_value = wave_data.get('global_max_value', np.nan)
+            global_max_label_added = False
+            if not np.isnan(global_max_time) and not np.isnan(global_max_value):
+                 scatter_global = plt.scatter(global_max_time, global_max_value,
+                                              marker='s', color='black', s=50, zorder=6,
+                                              label='_nolegend_')
+                 if not global_max_label_added:
+                     # Create proxy for legend
+                     proxy_global = plt.Line2D([0], [0], linestyle='none', marker='s', markersize=6, color='black')
+                     legend_handles.append(proxy_global)
+                     legend_labels.append('Global Max')
+                     global_max_label_added = True
+
 
             # Add labels and title
             plt.xlabel('Time (ms)')
@@ -1043,8 +1094,14 @@ def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Remove
             plt.title(f'Region Time Series - {wave_name}')
             plt.axvline(x=0, color='gray', linestyle='--', alpha=0.5)  # Mark t=0
             
-            # Add legend with smaller font
-            plt.legend(fontsize='small', loc='upper right')
+            # Add combined legend (region lines + custom markers)
+            # Get handles/labels from the plot for region lines
+            handles, labels = plt.gca().get_legend_handles_labels()
+            # Combine with custom marker handles/labels
+            all_handles = handles + legend_handles
+            all_labels = labels + legend_labels
+            # Create the legend
+            plt.legend(all_handles, all_labels, fontsize='small', loc='upper right', ncol=2) # Use ncol=2 if many items
             
             # Adjust layout
             plt.tight_layout()
