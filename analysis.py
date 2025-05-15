@@ -8,6 +8,7 @@ from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
 from scipy import stats as scipy_stats
+from statsmodels.stats.multitest import multipletests # Added for FDR correction
 
 from utils import (
     extract_region_name,
@@ -68,6 +69,8 @@ def validate_wave_result(result, csv_file_path=None):
             logging.error(f"[VALIDATION] Error saving validation log: {str(e)}")
 
 # Updated imports for stats_utils
+import itertools # Added for combinations
+from statsmodels.stats.multitest import multipletests # Added for FDR correction
 from stats_utils import (
     perform_friedman_test,
     perform_wilcoxon_posthoc,
@@ -864,46 +867,64 @@ def analyze_within_group_stage_comparison(results_by_treatment_group, master_reg
 
             logging.info(f"Found {len(valid_subjects_for_pairing)} subjects with complete data across stages for paired tests.")
 
-            # --- Perform Paired Statistical Tests on Involvement ---
+            # --- Perform Mann-Whitney U Tests on Involvement ---
             involvement_test_results = []
-            if len(valid_subjects_for_pairing) >= 2: # Need at least 2 subjects for paired tests
-                # Prepare data for Friedman/Wilcoxon: list of lists/arrays
-                friedman_data_input = [paired_involvement_data[stage] for stage in stages_with_data]
+            stages_with_data = [s for s in stages if any(subject_stage_involvement[subj][s] for subj in subjects)]
 
-                # Friedman Test (if 3+ stages)
-                if len(stages_with_data) >= 3:
-                    friedman_result = perform_friedman_test(*friedman_data_input)
-                    if friedman_result:
-                        involvement_test_results.append(friedman_result)
-                        logging.info(f"\nFriedman Test for Involvement in {group} Group: "
-                              f"Statistic={friedman_result['Statistic']:.2f}, p={friedman_result['P_Value']:.4f}")
-                        if friedman_result['Significant']:
-                            logging.info(f"Significant differences detected in involvement between stages for {group} Group.")
-                            # Perform post-hoc Wilcoxon only if Friedman is significant
-                            logging.info("\nPost-hoc Wilcoxon Signed-Rank Tests (FDR corrected):")
-                            wilcoxon_results = perform_wilcoxon_posthoc(friedman_data_input, stages_with_data)
-                            involvement_test_results.extend(wilcoxon_results)
-                            for res in wilcoxon_results:
-                                logging.info(f"  {res['Metric'].split(': ')[1]}: p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
-                        else:
-                             logging.info("Friedman test not significant, skipping post-hoc tests.")
-                    else:
-                        logging.warning("Could not perform Friedman test.")
-                # Wilcoxon Test (if exactly 2 stages)
-                elif len(stages_with_data) == 2:
-                     logging.info("\nPerforming Wilcoxon Signed-Rank Test (only 2 stages):")
-                     wilcoxon_results = perform_wilcoxon_posthoc(friedman_data_input, stages_with_data)
-                     involvement_test_results.extend(wilcoxon_results)
-                     for res in wilcoxon_results:
-                         logging.info(f"  {res['Metric'].split(': ')[1]}: Stat={res['Statistic']:.2f}, p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
+            if len(stages_with_data) >= 2:
+                # Prepare data for Mann-Whitney U tests
+                stage_data = {}
+                for stage in stages_with_data:
+                    # Collect all involvement values for this stage across all subjects
+                    all_values = []
+                    for subject in subjects:
+                        all_values.extend(subject_stage_involvement[subject][stage])
+                    if all_values:
+                        stage_data[stage] = all_values
+
+                # Perform pairwise Mann-Whitney U tests
+                pairwise_results_raw = []
+                comparisons = list(itertools.combinations(stages_with_data, 2))
+
+                for stage1, stage2 in comparisons:
+                    data1 = stage_data[stage1]
+                    data2 = stage_data[stage2]
+
+                    if data1 and data2:  # Ensure both stages have data
+                        try:
+                            u_stat, p_val = scipy_stats.mannwhitneyu(data1, data2, alternative='two-sided')
+                            pairwise_results_raw.append({
+                                'stage1': stage1,
+                                'stage2': stage2,
+                                'statistic': u_stat,
+                                'p_value_raw': p_val
+                            })
+                        except Exception as e:
+                            logging.error(f"Error performing Mann-Whitney U test for {stage1} vs {stage2}: {str(e)}")
+
+                # Apply FDR correction
+                if pairwise_results_raw:
+                    pvals_raw = [res['p_value_raw'] for res in pairwise_results_raw]
+                    reject, pvals_corrected, _, _ = multipletests(pvals_raw, method='fdr_bh', alpha=0.05)
+
+                    # Format final results
+                    for i, raw_res in enumerate(pairwise_results_raw):
+                        involvement_test_results.append({
+                            'Test': 'Mann-Whitney U',
+                            'Metric': f'Involvement: {raw_res["stage1"]} vs {raw_res["stage2"]}',
+                            'Statistic': raw_res['statistic'],
+                            'P_Value': pvals_corrected[i],
+                            'Significant': reject[i]
+                        })
+
+                    # Log results
+                    logging.info("\nMann-Whitney U Tests for Involvement (FDR corrected):")
+                    for res in involvement_test_results:
+                        logging.info(f"  {res['Metric'].split(': ')[1]}: U={res['Statistic']:.2f}, p={res['P_Value']:.4f} {'*' if res['Significant'] else ''}")
                 else:
-                    logging.warning("Not enough stages for comparison.")
-
+                    logging.info("No Mann-Whitney U tests performed due to insufficient data.")
             else:
-                logging.warning(f"Not enough subjects ({len(valid_subjects_for_pairing)}) with complete data across stages for paired tests in {group} group.")
-
-            if not involvement_test_results:
-                 logging.info(f"No paired statistical tests performed for involvement in {group} Group.")
+                logging.warning(f"Not enough stages with data for Mann-Whitney U tests in {group} group.")
 
 
         # --- Calculate Descriptive Involvement Stats (using all available data per stage) ---

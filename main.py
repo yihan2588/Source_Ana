@@ -92,7 +92,7 @@ def main():
     source_dir = data_directory
     results_base_dir = os.path.join(source_dir, "Source_Ana")
     os.makedirs(results_base_dir, exist_ok=True)
-    log_file_path = os.path.join(results_base_dir, "pipeline_run.log")
+    log_file_path = os.path.join(results_base_dir, "source_ana_run.log")
 
     logging.basicConfig(
         level=logging.INFO,
