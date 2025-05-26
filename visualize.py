@@ -1047,7 +1047,7 @@ def visualize_region_time_series(wave_data, csv_file, source_dir=None): # Remove
                                 proxy_first = plt.Line2D([0], [0], linestyle='none', marker='o', markersize=6,
                                                          markerfacecolor='none', markeredgecolor='green', markeredgewidth=1.5)
                                 legend_handles.append(proxy_first)
-                                legend_labels.append('Voxel First Peak')
+                                legend_labels.append('Voxel Peak Closest to 0ms')
                                 first_peak_label_added = True
 
             # Mark origins with red stars on the corresponding region's curve

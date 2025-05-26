@@ -150,16 +150,15 @@ def analyze_slow_wave(df, wave_name, threshold_percent=25):
                 peaks_above_threshold = list(zip(peak_times, peak_values))
 
             if peaks_above_threshold:
-                # Find the peak that occurred earliest in time
-                first_peak = min(peaks_above_threshold, key=lambda x: x[0])
-                first_peak_time = first_peak[0]
-                # first_peak_value = first_peak[1] # Value is available if needed
-
+                # Find the peak that is closest to 0 ms (voltage peak)
+                closest_peak = min(peaks_above_threshold, key=lambda x: abs(x[0] - 0))
+                closest_peak_time = closest_peak[0]
+                
                 region = extract_region_name(voxel_names[voxel_idx])
                 voxel_peak_times.append({
                 'full_name': voxel_names[voxel_idx],
                 'region': region,
-                'peak_time': first_peak_time
+                'peak_time': closest_peak_time
                 })
                 involved_voxels.append(voxel_names[voxel_idx]) # Indented this line
 
@@ -366,8 +365,6 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, sourc
                 if visualize_regions:
                     # Use source_dir if provided, otherwise use the standard 'results' directory
                     visualize_region_time_series(result, csv_file, source_dir=source_dir) # output_dir handled internally
-                    # Pass the full result dict (wave_data) to plot_voxel_waveforms
-                    plot_voxel_waveforms(result, csv_file, source_dir=source_dir) # output_dir handled internally
 
                 # logging.info(f"Processed {filename} - Protocol: {protocol}, Stage: {stage}") # Logged by validate_wave_result
             except Exception as e:
