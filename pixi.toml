@@ -1,0 +1,39 @@
+[workspace]
+authors = ["yihan2588 <167504939+yihan2588@users.noreply.github.com>"]
+channels = ["conda-forge"]
+name = "source_ana_env"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+run-analysis = "python main.py"
+test-single-wave = "python test_single_wave.py"
+format-code = { depends-on = ["black", "isort"] }
+black = "black *.py"
+isort = "isort *.py"
+jupyter-lab = "jupyter lab"
+install = "pixi install"
+
+[dependencies]
+
+[feature.data-analysis.dependencies]
+numpy = "*"
+pandas = "*"
+matplotlib = "*"
+scipy = "*"
+statsmodels = "*"
+
+[feature.jupyter.dependencies]
+jupyter = "*"
+ipykernel = "*"
+
+[feature.dev.dependencies]
+pytest = "*"
+black = "*"
+isort = "*"
+
+[environments]
+default = ["data-analysis"]
+jupyter = ["data-analysis", "jupyter"]
+dev = ["data-analysis", "dev"]
+full = ["data-analysis", "jupyter", "dev"]
