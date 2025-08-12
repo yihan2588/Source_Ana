@@ -200,7 +200,7 @@ brew install pixi
 #### Quick Start with Pixi
 ```bash
 # Clone and enter the repository
-git clone <repository-url>
+git clone <https://github.com/yihan2588/Source_Ana.git>
 cd Source_Ana
 
 # Install all dependencies
