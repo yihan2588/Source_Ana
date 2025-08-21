@@ -7,17 +7,22 @@ from analysis import (
     process_eeg_data_directory,
     analyze_overall_treatment_comparison,
     analyze_proto_specific_comparison,
-    analyze_within_group_stage_comparison
+    analyze_within_group_stage_comparison,
+    consolidate_statistical_results,
+    calculate_involvement_percentage_changes
 )
 from visualize import (
     visualize_overall_treatment_comparison,
     visualize_proto_specific_comparison,
-    visualize_within_group_stage_comparison
+    visualize_within_group_stage_comparison,
+    visualize_involvement_percentage_changes
 )
 from save_results import (
     save_overall_treatment_comparison_results,
     save_proto_specific_comparison_results,
-    save_within_group_stage_comparison_results
+    save_within_group_stage_comparison_results,
+    save_consolidated_statistical_results,
+    save_involvement_percentage_changes
 )
 from utils import (
     compute_master_region_list,
@@ -87,6 +92,18 @@ def main():
             print("Invalid input. Please enter comma-separated numbers.")
             return
 
+    # Get user preferences for processing options
+    visualize_input = input("\nDo you want to generate time-series plots showing regional activity with peak markers? (y/n): ").strip().lower()
+    visualize_regions = visualize_input in ['y', 'yes']
+    
+    process_origins_input = input("Do you want to process origin analysis? (y/n): ").strip().lower()
+    process_origins = process_origins_input in ['y', 'yes']
+    
+    if not process_origins:
+        print("Note: Origin analysis will be skipped. Only involvement analysis will be performed.")
+    if not visualize_regions:
+        print("Note: Time-series plots will not be generated.")
+
     # --- Logging Setup ---
     # The source directory is where we'll create the "Source_Ana" directory for results
     source_dir = data_directory
@@ -111,7 +128,8 @@ def main():
         subject_condition_mapping,
         selected_subjects,
         selected_nights,
-        visualize_regions=True,
+        visualize_regions=visualize_regions,
+        process_origins=process_origins,
         source_dir=source_dir # Pass source_dir for output path construction
     )
 
@@ -194,6 +212,30 @@ def main():
         proto_specific_files = save_proto_specific_comparison_results(proto_specific_results, source_dir=source_dir) # output_dir handled internally
         within_group_files = save_within_group_stage_comparison_results(within_group_results, source_dir=source_dir) # output_dir handled internally
 
+        # --- Consolidate and Save All Statistical Results ---
+        logging.info("\n=== Consolidating Statistical Results ===")
+        consolidated_tests = consolidate_statistical_results(
+            overall_comparison_results, 
+            proto_specific_results, 
+            within_group_results
+        )
+        consolidated_file = save_consolidated_statistical_results(consolidated_tests, source_dir=source_dir)
+        
+        # --- Calculate, Save, and Visualize Percentage Changes ---
+        logging.info("\n=== Analyzing Involvement Percentage Changes ===")
+        percentage_change_data = calculate_involvement_percentage_changes(
+            overall_comparison_results,
+            proto_specific_results,
+            results_by_treatment_group
+        )
+        
+        # Save percentage change data to CSV files
+        percentage_change_files = save_involvement_percentage_changes(percentage_change_data, source_dir=source_dir)
+        
+        # Create percentage change visualizations
+        logging.info("\n--- Creating Percentage Change Visualizations ---")
+        visualize_involvement_percentage_changes(percentage_change_data, source_dir=source_dir)
+
     else:
         logging.warning("Only one treatment group found. Skipping comparison analyses, visualizations, and saving.")
         # Initialize file dictionaries as empty if no comparison is done
@@ -203,6 +245,7 @@ def main():
         overall_comparison_results = None
         proto_specific_results = None
         within_group_results = None
+        percentage_change_files = {}
 
     # Individual protocol visualizations and saving are removed as requested.
 
@@ -235,6 +278,16 @@ def main():
                     if path is not None:
                         logging.info(f" - {path}")
             elif file_path is not None:
+                logging.info(f" - {file_path}")
+
+        if consolidated_file:
+            logging.info(f"\nConsolidated statistical results saved to:")
+            logging.info(f" - {consolidated_file}")
+        
+        # Log percentage change files
+        if percentage_change_files:
+            logging.info(f"\nPercentage change results saved to:")
+            for file_type, file_path in percentage_change_files.items():
                 logging.info(f" - {file_path}")
 
 

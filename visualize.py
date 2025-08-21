@@ -9,6 +9,116 @@ from collections import Counter
 from scipy.signal import find_peaks
 from utils import extract_region_name
 
+
+def add_significance_indicators(ax, x_positions, y_max, test_results, comparison_type='between_group'):
+    """
+    Add significance indicators (asterisks) to plots based on statistical test results.
+    
+    Args:
+        ax: matplotlib axis object
+        x_positions: list of x positions for bars/stages
+        y_max: maximum y value for positioning asterisks
+        test_results: list of test result dictionaries with 'Significant' and 'P_Value' keys
+        comparison_type: 'between_group' or 'within_group'
+    """
+    if not test_results:
+        return
+    
+    # Define significance levels and symbols
+    def get_significance_symbol(p_value):
+        if p_value < 0.001:
+            return '***'
+        elif p_value < 0.01:
+            return '**'
+        elif p_value < 0.05:
+            return '*'
+        else:
+            return ''
+    
+    if comparison_type == 'between_group':
+        # For between-group comparisons, add asterisks above bars for each stage
+        stage_p_values = {}
+        for test in test_results:
+            if test.get('Significant', False) and 'Stage' in test:
+                stage = test['Stage']
+                p_value = test.get('P_Value', 1.0)
+                stage_p_values[stage] = p_value
+        
+        # Add asterisks above the appropriate stages
+        for i, stage in enumerate(['pre', 'early', 'late', 'post', 'stim']):
+            if stage in stage_p_values and i < len(x_positions):
+                symbol = get_significance_symbol(stage_p_values[stage])
+                if symbol:
+                    ax.text(x_positions[i], y_max * 1.15, symbol, 
+                           ha='center', va='bottom', fontsize=12, fontweight='bold')
+                    
+    elif comparison_type == 'within_group':
+        # For within-group comparisons, add connecting lines with asterisks
+        y_offset = y_max * 0.1
+        line_height = y_max * 1.1
+        
+        for i, test in enumerate(test_results):
+            if test.get('Significant', False):
+                # Parse stage comparison from metric
+                metric = test.get('Metric', '')
+                if 'vs' in metric:
+                    stage_comparison = metric.split(': ')[1] if ': ' in metric else metric
+                    stages = stage_comparison.split(' vs ')
+                    if len(stages) == 2:
+                        stage1, stage2 = stages[0].strip(), stages[1].strip()
+                        
+                        # Find positions of the stages
+                        stage_names = ['pre', 'early', 'late', 'post', 'stim']
+                        try:
+                            pos1 = stage_names.index(stage1) if stage1 in stage_names else None
+                            pos2 = stage_names.index(stage2) if stage2 in stage_names else None
+                            
+                            if pos1 is not None and pos2 is not None and pos1 < len(x_positions) and pos2 < len(x_positions):
+                                x1, x2 = x_positions[pos1], x_positions[pos2]
+                                y_line = line_height + (i * y_offset)
+                                
+                                # Draw connecting line
+                                ax.plot([x1, x1, x2, x2], [y_line - y_offset/3, y_line, y_line, y_line - y_offset/3], 
+                                       'k-', linewidth=1)
+                                
+                                # Add significance symbol
+                                symbol = get_significance_symbol(test.get('P_Value', 1.0))
+                                if symbol:
+                                    ax.text((x1 + x2) / 2, y_line + y_offset/4, symbol,
+                                           ha='center', va='bottom', fontsize=10, fontweight='bold')
+                        except (ValueError, IndexError):
+                            continue
+
+
+def determine_global_scale(proto_specific_results):
+    """
+    Determine global min and max values across all protocols for consistent scaling.
+    
+    Args:
+        proto_specific_results: Results from proto-specific comparison
+        
+    Returns:
+        tuple: (global_min, global_max) for y-axis scaling
+    """
+    all_values = []
+    
+    proto_results = proto_specific_results.get('proto_specific_results', {})
+    for protocol, results in proto_results.items():
+        involvement_stats = results.get('involvement_stats', {})
+        for group, stats_by_stage in involvement_stats.items():
+            for stage, stats in stats_by_stage.items():
+                if stats.get('count', 0) > 0:
+                    mean = stats.get('mean', 0)
+                    std = stats.get('std', 0)
+                    all_values.extend([mean - std, mean + std])
+    
+    if all_values:
+        global_min = max(0, min(all_values) - 1)  # Don't go below 0
+        global_max = max(all_values) * 1.2  # Add 20% padding
+        return global_min, global_max
+    else:
+        return 0, 10  # Default range
+
 # Removed visualize_results function as requested
 
 def create_involvement_boxplot(data, labels, title, filename, colors=None):
@@ -541,6 +651,13 @@ def visualize_overall_treatment_comparison(overall_comparison_results, source_di
         bar_width = 0.35
         index = np.arange(len(stages))
 
+        # Calculate max y value for significance indicators
+        all_means = [d['means'] for d in stage_data]
+        all_errors = [d['errors'] for d in stage_data]
+        max_values = [max(means[i] + errors[i] for i in range(len(means))) 
+                      for means, errors in zip(all_means, all_errors)]
+        y_max = max(max_values) if max_values else 0
+
         for i, group in enumerate(groups):
             means = [d['means'][i] for d in stage_data]
             errors = [d['errors'][i] for d in stage_data]
@@ -561,6 +678,14 @@ def visualize_overall_treatment_comparison(overall_comparison_results, source_di
             for j, mean in enumerate(means):
                 if mean > 0:
                     plt.text(j + i*bar_width, mean + 1, f'{mean:.1f}%', ha='center', va='bottom', fontsize=9)
+
+        # Add significance indicators
+        test_results = overall_comparison_results.get('overall_comparison_tests', [])
+        x_positions = index + bar_width/2  # Center between group bars
+        add_significance_indicators(plt.gca(), x_positions, y_max, test_results, 'between_group')
+
+        # Adjust y-axis to accommodate significance indicators
+        plt.ylim(0, y_max * 1.3)
 
         plt.tight_layout()
         # Save to the new involvement directory
@@ -749,7 +874,7 @@ def plot_voxel_waveforms(wave_data, csv_file, num_voxels=3, source_dir=None): # 
 
 def visualize_proto_specific_comparison(proto_specific_results, source_dir=None): # Removed output_dir
     """
-    Create visualizations for the proto-specific comparison.
+    Create visualizations for the proto-specific comparison with global scaling and significance indicators.
 
     Args:
         proto_specific_results: Results from proto-specific comparison
@@ -790,6 +915,8 @@ def visualize_proto_specific_comparison(proto_specific_results, source_dir=None)
     involvement_csv_file = os.path.join(involvement_dir, "proto_specific_involvement_statistics.csv")
     use_involvement_csv = os.path.exists(involvement_csv_file)
 
+    # Determine global scale for consistent y-axis across all protocol plots
+    global_min, global_max = determine_global_scale(proto_specific_results)
 
     for protocol, results in proto_results.items():
         involvement_stats = results['involvement_stats']
@@ -819,6 +946,13 @@ def visualize_proto_specific_comparison(proto_specific_results, source_dir=None)
             bar_width = 0.35
             index = np.arange(len(stages))
 
+            # Calculate max y value for significance indicators
+            all_means = [d['means'] for d in stage_data]
+            all_errors = [d['errors'] for d in stage_data]
+            max_values = [max(means[i] + errors[i] for i in range(len(means))) 
+                          for means, errors in zip(all_means, all_errors)]
+            y_max = max(max_values) if max_values else global_max
+
             for i, group in enumerate(groups):
                 means = [d['means'][i] for d in stage_data]
                 errors = [d['errors'][i] for d in stage_data]
@@ -839,6 +973,14 @@ def visualize_proto_specific_comparison(proto_specific_results, source_dir=None)
                 for j, mean in enumerate(means):
                     if mean > 0:
                         plt.text(j + i*bar_width, mean + 1, f'{mean:.1f}%', ha='center', va='bottom', fontsize=9)
+
+            # Add significance indicators
+            test_results = results.get('comparison_tests', [])
+            x_positions = index + bar_width/2  # Center between group bars
+            add_significance_indicators(plt.gca(), x_positions, y_max, test_results, 'between_group')
+
+            # Apply global scaling for consistency across protocols
+            plt.ylim(global_min, max(global_max, y_max * 1.3))
 
             plt.tight_layout()
             # Save to the new involvement directory, including protocol in filename
@@ -1194,6 +1336,10 @@ def visualize_within_group_stage_comparison(within_group_results, source_dir=Non
                     valid_stages.append(stage)
 
         if valid_stages:
+            # Calculate max y value for significance indicators
+            max_values = [means[i] + errors[i] for i in range(len(means))]
+            y_max = max(max_values) if max_values else 0
+
             plt.bar(valid_stages, means, yerr=errors, capsize=5, color='skyblue')
             plt.xlabel('Stage')
             plt.ylabel('Mean Involvement (%)')
@@ -1203,6 +1349,14 @@ def visualize_within_group_stage_comparison(within_group_results, source_dir=Non
             for i, mean in enumerate(means):
                 if mean > 0:
                     plt.text(i, mean + 1, f'{mean:.1f}%', ha='center', va='bottom', fontsize=9)
+
+            # Add significance indicators for within-group stage comparisons
+            test_results = results.get('stage_comparison_tests', [])
+            x_positions = range(len(valid_stages))  # x positions for the bars
+            add_significance_indicators(plt.gca(), x_positions, y_max, test_results, 'within_group')
+
+            # Adjust y-axis to accommodate significance indicators
+            plt.ylim(0, y_max * 1.5)
 
             plt.tight_layout()
             # Save to the new involvement directory, including group in filename
@@ -1223,3 +1377,263 @@ def visualize_within_group_stage_comparison(within_group_results, source_dir=Non
             csv_file=origin_csv_file, # Use correctly constructed path
             limit_regions=False  # Show all regions
         )
+
+
+def visualize_involvement_percentage_changes(percentage_change_data, source_dir=None):
+    """
+    Create comprehensive visualizations for involvement percentage changes with consistent scaling.
+    Each protocol gets individual graphs with Stim-Pre on left and Post-Pre on right.
+    
+    Args:
+        percentage_change_data: Dictionary containing percentage change data from calculate_involvement_percentage_changes()
+        source_dir: Source directory where data is read from, used to construct output path
+    """
+    if not percentage_change_data:
+        logging.warning("No percentage change data to visualize")
+        return
+    
+    # Define base output directory structure
+    base_output_dir = "results"
+    if source_dir:
+        base_output_dir = os.path.join(source_dir, "Source_Ana")
+    
+    # Define percentage change visualization directory
+    viz_dir = os.path.join(base_output_dir, "involvement", "percentage_changes")
+    os.makedirs(viz_dir, exist_ok=True)
+    
+    logging.info("\n=== Creating Involvement Percentage Change Visualizations ===")
+    
+    # --- Overall Percentage Changes Visualization ---
+    if 'overall' in percentage_change_data and percentage_change_data['overall']:
+        overall_changes = percentage_change_data['overall']
+        
+        # Determine comparison types and ensure proper ordering (Stim-Pre left, Post-Pre right)
+        comparison_types = set()
+        for group in overall_changes:
+            comparison_types.update(overall_changes[group].keys())
+        comparison_types = sorted(list(comparison_types))
+        
+        # Reorder to put Stim-Pre first (left), then Post-Pre (right)
+        if 'Stim-Pre' in comparison_types and 'Post-Pre' in comparison_types:
+            comparison_types = ['Stim-Pre', 'Post-Pre']
+        
+        if comparison_types:
+            # Calculate statistics for each group and comparison type
+            overall_stats = {}
+            all_values = []  # For global scaling
+            
+            for group in overall_changes:
+                overall_stats[group] = {}
+                for comp_type in comparison_types:
+                    if comp_type in overall_changes[group]:
+                        changes = [item['percentage_change'] for item in overall_changes[group][comp_type]]
+                        if changes:
+                            overall_stats[group][comp_type] = {
+                                'mean': np.mean(changes),
+                                'std': np.std(changes),
+                                'count': len(changes),
+                                'values': changes
+                            }
+                            all_values.extend(changes)
+                        else:
+                            overall_stats[group][comp_type] = {
+                                'mean': 0, 'std': 0, 'count': 0, 'values': []
+                            }
+                    else:
+                        overall_stats[group][comp_type] = {
+                            'mean': 0, 'std': 0, 'count': 0, 'values': []
+                        }
+            
+            # Calculate global scale
+            if all_values:
+                global_min = min(all_values) - abs(min(all_values)) * 0.1
+                global_max = max(all_values) + abs(max(all_values)) * 0.1
+            else:
+                global_min, global_max = -50, 50
+            
+            # Create visualization with Stim-Pre on left, Post-Pre on right
+            fig, axes = plt.subplots(1, len(comparison_types), figsize=(6*len(comparison_types), 8))
+            if len(comparison_types) == 1:
+                axes = [axes]
+            
+            groups = sorted(overall_changes.keys())
+            bar_width = 0.35
+            x_pos = np.arange(len(groups))
+            
+            for i, comp_type in enumerate(comparison_types):
+                ax = axes[i]
+                
+                means = [overall_stats[group][comp_type]['mean'] for group in groups]
+                stds = [overall_stats[group][comp_type]['std'] for group in groups]
+                counts = [overall_stats[group][comp_type]['count'] for group in groups]
+                
+                colors = ['lightblue' if group.lower() == 'active' else 'lightgreen' for group in groups]
+                bars = ax.bar(x_pos, means, bar_width,
+                             color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+                
+                # Add value labels
+                for j, (mean, count) in enumerate(zip(means, counts)):
+                    if count > 0:
+                        ax.text(j, mean + (stds[j] if mean >= 0 else -stds[j]) + 
+                               (global_max - global_min) * 0.02 * (1 if mean >= 0 else -1), 
+                               f'{mean:.1f}%\n(n={count})', 
+                               ha='center', va='bottom' if mean >= 0 else 'top', fontsize=10)
+                
+                # Add horizontal line at zero
+                ax.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+                
+                ax.set_title(f'Overall {comp_type} Change', fontsize=14, fontweight='bold')
+                ax.set_xlabel('Treatment Group', fontsize=12)
+                ax.set_ylabel('Percentage Change (%)', fontsize=12)
+                ax.set_xticks(x_pos)
+                ax.set_xticklabels(groups)
+                ax.set_ylim(global_min, global_max)
+                ax.grid(True, alpha=0.3)
+            
+            plt.suptitle('Overall Involvement Percentage Changes\n(All Protocols Combined)', 
+                        fontsize=16, fontweight='bold')
+            plt.tight_layout()
+            
+            filename = os.path.join(viz_dir, "overall_percentage_changes_visualization.png")
+            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            logging.info(f"Saved overall percentage changes visualization as '{filename}'")
+            plt.close()
+    
+    # --- Protocol-Specific Percentage Changes Visualization (2x4 Grid Layout) ---
+    if 'protocol_specific' in percentage_change_data and percentage_change_data['protocol_specific']:
+        proto_changes = percentage_change_data['protocol_specific']
+        
+        # Filter to only proto1-8 as requested and sort
+        protocols_to_include = [f'proto{i}' for i in range(1, 9)]
+        protocols = [p for p in sorted(proto_changes.keys()) if p in protocols_to_include]
+        
+        # Determine comparison types and ensure proper ordering
+        comparison_types = set()
+        for protocol in protocols:
+            for group in proto_changes[protocol]:
+                comparison_types.update(proto_changes[protocol][group].keys())
+        comparison_types = sorted(list(comparison_types))
+        
+        # Reorder to put Stim-Pre first (left), then Post-Pre (right)
+        if 'Stim-Pre' in comparison_types and 'Post-Pre' in comparison_types:
+            comparison_types = ['Stim-Pre', 'Post-Pre']
+        
+        if protocols and comparison_types:
+            # Calculate statistics using the new data structure from analysis.py
+            all_values = []  # For global scaling across all protocols
+            proto_stats = {}
+            
+            for protocol in protocols:
+                proto_stats[protocol] = {}
+                for group in proto_changes[protocol]:
+                    proto_stats[protocol][group] = {}
+                    for comp_type in comparison_types:
+                        if comp_type in proto_changes[protocol][group]:
+                            # Use the new data structure: {'percentage_change_mean': ..., 'percentage_change_std': ..., 'count': ...}
+                            change_data = proto_changes[protocol][group][comp_type]
+                            if 'percentage_change_mean' in change_data and change_data['count'] > 0:
+                                proto_stats[protocol][group][comp_type] = {
+                                    'mean': change_data['percentage_change_mean'],
+                                    'std': change_data['percentage_change_std'],
+                                    'count': change_data['count']
+                                }
+                                all_values.append(change_data['percentage_change_mean'])
+                            else:
+                                proto_stats[protocol][group][comp_type] = {
+                                    'mean': 0, 'std': 0, 'count': 0
+                                }
+                        else:
+                            proto_stats[protocol][group][comp_type] = {
+                                'mean': 0, 'std': 0, 'count': 0
+                            }
+            
+            # Calculate global scale for consistent scaling across all protocols
+            if all_values:
+                global_min = min(all_values) - abs(min(all_values)) * 0.1
+                global_max = max(all_values) + abs(max(all_values)) * 0.1
+            else:
+                global_min, global_max = -50, 50
+            
+            groups = sorted(set(group for protocol in proto_changes for group in proto_changes[protocol]))
+            
+            # Create 2x4 subplot grid: proto1-4 in top row, proto5-8 in bottom row
+            fig, axes = plt.subplots(2, 4, figsize=(20, 12))
+            
+            # Map protocols to subplot positions
+            protocol_positions = {
+                'proto1': (0, 0), 'proto2': (0, 1), 'proto3': (0, 2), 'proto4': (0, 3),
+                'proto5': (1, 0), 'proto6': (1, 1), 'proto7': (1, 2), 'proto8': (1, 3)
+            }
+            
+            for protocol in protocols:
+                if protocol not in protocol_positions:
+                    continue
+                    
+                row, col = protocol_positions[protocol]
+                ax = axes[row, col]
+                
+                # Prepare data for this protocol
+                bar_width = 0.35
+                x_base = np.arange(len(comparison_types))
+                
+                for i, group in enumerate(groups):
+                    means = []
+                    stds = []
+                    counts = []
+                    
+                    for comp_type in comparison_types:
+                        if group in proto_stats[protocol]:
+                            means.append(proto_stats[protocol][group][comp_type]['mean'])
+                            stds.append(proto_stats[protocol][group][comp_type]['std'])
+                            counts.append(proto_stats[protocol][group][comp_type]['count'])
+                        else:
+                            means.append(0)
+                            stds.append(0)
+                            counts.append(0)
+                    
+                    # Position bars side by side for each comparison type
+                    x_pos = x_base + i * bar_width
+                    color = 'lightblue' if group.lower() == 'active' else 'lightgreen'
+                    
+                    bars = ax.bar(x_pos, means, bar_width,
+                                 color=color, alpha=0.8, edgecolor='black', linewidth=0.5,
+                                 label=group if row == 0 and col == 0 else "")  # Only add legend to first subplot
+                    
+                    # Add value labels
+                    for j, (mean, std, count) in enumerate(zip(means, stds, counts)):
+                        if count > 0:
+                            label_y = mean + (std if mean >= 0 else -std) + (global_max - global_min) * 0.02 * (1 if mean >= 0 else -1)
+                            ax.text(x_pos[j], label_y, f'{mean:.1f}%\n(n={count})',
+                                   ha='center', va='bottom' if mean >= 0 else 'top', fontsize=8)
+                
+                # Add horizontal line at zero
+                ax.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+                
+                # Set titles and labels
+                ax.set_title(f'{protocol.upper()}', fontsize=12, fontweight='bold')
+                ax.set_xticks(x_base + bar_width/2)
+                ax.set_xticklabels(comparison_types, fontsize=10)
+                ax.set_ylim(global_min, global_max)
+                ax.grid(True, alpha=0.3)
+                
+                # Add axis labels only to leftmost column and bottom row
+                if col == 0:
+                    ax.set_ylabel('Percentage Change (%)', fontsize=11)
+                if row == 1:
+                    ax.set_xlabel('Comparison Type', fontsize=11)
+            
+            # Add legend only to the first subplot
+            axes[0, 0].legend(loc='upper left', fontsize=10)
+            
+            plt.suptitle('Protocol-Specific Involvement Percentage Changes\n(2x4 Grid: Proto1-4 Top Row, Proto5-8 Bottom Row)', 
+                        fontsize=16, fontweight='bold')
+            plt.tight_layout()
+            
+            # Save the combined 2x4 grid visualization
+            combined_filename = os.path.join(viz_dir, "protocol_specific_percentage_changes_2x4_grid.png")
+            plt.savefig(combined_filename, dpi=300, bbox_inches='tight')
+            logging.info(f"Saved protocol-specific 2x4 grid percentage changes visualization as '{combined_filename}'")
+            plt.close()
+    
+    # Log summary
+    logging.info(f"Created percentage change visualizations in {viz_dir}")

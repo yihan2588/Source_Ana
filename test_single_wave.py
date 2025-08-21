@@ -36,9 +36,29 @@ def main():
         wave_name = csv_file_path.stem
         logging.info(f"Successfully loaded {wave_name}. Starting analysis...")
 
-        # Analyze the slow wave
-        # Pass the threshold percentage if it's different from the default (25)
-        result = analyze_slow_wave(df, wave_name, threshold_percent=25)
+        # Analyze the slow wave using adaptive threshold approach
+        # First, calculate a sample threshold from the data (simulate 75th percentile)
+        import numpy as np
+        numeric_cols = []
+        for col in df.columns[1:]:
+            if not str(col).startswith('Unnamed'):
+                try:
+                    float(col)
+                    numeric_cols.append(col)
+                except ValueError:
+                    continue
+        
+        if numeric_cols:
+            # Calculate 75th percentile threshold from this single file (for demonstration)
+            data = np.abs(df.loc[:, numeric_cols].values)
+            sample_threshold = np.percentile(data.flatten(), 75)
+            logging.info(f"Calculated 75th percentile threshold from data: {sample_threshold:.6e}")
+            
+            # Analyze using the calculated threshold
+            result = analyze_slow_wave(df, wave_name, process_origins=True, fixed_threshold=sample_threshold)
+        else:
+            # Fallback to percentage-based threshold if no numeric columns found
+            result = analyze_slow_wave(df, wave_name, threshold_percent=25, process_origins=True)
 
         logging.info(f"Analysis complete for {wave_name}. Validating results...")
 
