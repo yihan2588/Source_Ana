@@ -83,7 +83,7 @@ from scipy.signal import find_peaks # Added for peak detection
 from visualize import visualize_region_time_series, plot_voxel_waveforms
 
 
-def analyze_slow_wave(df, wave_name, threshold_percent=25):
+def analyze_slow_wave(df, wave_name, threshold_percent=50):
     """
     Analyze a single slow wave CSV file to extract origin and involvement metrics.
     Uses a fixed window of -50ms to +50ms.
