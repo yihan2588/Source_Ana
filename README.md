@@ -183,10 +183,75 @@ Origin barplots don't display all brain regions but apply filtering:
    - Chi-Square test when assumptions are met
    - Fisher's Exact test for 2x2 tables or when Chi-Square assumptions are violated
 
-## Dependencies
+## Installation & Dependencies
+
+### Option 1: Using Pixi (Recommended)
+
+This repository includes a `pixi.toml` file for easy dependency management. [Pixi](https://prefix.dev/docs/pixi/overview) is a modern package manager that creates reproducible environments.
+
+#### Install Pixi
+```bash
+# macOS/Linux
+curl -fsSL https://pixi.sh/install.sh | bash
+# Or using Homebrew on macOS
+brew install pixi
+```
+
+#### Quick Start with Pixi
+```bash
+# Clone and enter the repository
+git clone https://github.com/yihan2588/Source_Ana.git
+cd Source_Ana
+
+# Install all dependencies
+pixi install
+
+# Run the main analysis
+pixi run run-analysis
+
+# Or run specific scripts
+pixi run test-single-wave
+```
+
+#### Available Pixi Environments
+
+- **default**: Core data analysis dependencies (numpy, pandas, matplotlib, scipy, statsmodels)
+- **jupyter**: Includes Jupyter Lab for interactive analysis
+- **dev**: Includes development tools (pytest, black, isort)
+- **full**: All features combined
+
+#### Available Pixi Tasks
+
+- `pixi run run-analysis` - Run the main EEG analysis pipeline
+- `pixi run test-single-wave` - Test analysis on a single wave file
+- `pixi run jupyter-lab` - Start Jupyter Lab (requires jupyter environment)
+- `pixi run format-code` - Format all Python files with black and isort
+
+#### Using Different Environments
+```bash
+# Use default environment (data-analysis only)
+pixi run run-analysis
+
+# Use jupyter environment for interactive work
+pixi run -e jupyter jupyter-lab
+
+# Use dev environment for development
+pixi run -e dev format-code
+
+# Use full environment with all features
+pixi run -e full jupyter-lab
+```
+
+### Option 2: Manual Installation
+
+If you prefer to manage dependencies manually, install the following packages:
 
 - numpy
 - pandas
 - matplotlib
 - scipy
 - statsmodels
+
+```bash
+pip install numpy pandas matplotlib scipy statsmodels
+```
