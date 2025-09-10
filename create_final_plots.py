@@ -95,20 +95,19 @@ def create_simple_boxplot(subject_df, title_suffix="", output_path=None):
 
 
 def create_simple_change_plot(changes_df, title_suffix="", output_path=None, global_y_lim=None):
-    """Create simple percentage change plot with Stim-Pre left, Post-Pre right."""
+    """Create simple percentage change plot with group-level changes from box plot means."""
     
     if len(changes_df) == 0:
         return None
     
     # Colors
     bar_colors = {'Active': 'lightblue', 'SHAM': 'lightgreen'}
-    point_colors = {'Active': 'blue', 'SHAM': 'green'}
     
     # Fixed order: Stim-Pre left, Post-Pre right
     comparisons = ['Stim-Pre', 'Post-Pre']
     available_comps = [c for c in comparisons if c in changes_df['Comparison'].unique()]
     
-    fig, axes = plt.subplots(1, len(available_comps), figsize=(6*len(available_comps), 8))
+    fig, axes = plt.subplots(1, len(available_comps), figsize=(6*len(available_comps), 6))
     if len(available_comps) == 1:
         axes = [axes]
     
@@ -120,35 +119,32 @@ def create_simple_change_plot(changes_df, title_suffix="", output_path=None, glo
         ax = axes[i]
         comp_data = changes_df[changes_df['Comparison'] == comparison]
         
-        # Plot each group
+        # Plot each group - now we have one value per group
         for j, group in enumerate(['Active', 'SHAM']):
             group_data = comp_data[comp_data['Treatment_Group'] == group]
             if len(group_data) > 0:
-                values = group_data['Percentage_Change'].values
-                mean = np.mean(values)
-                std = np.std(values)
+                # Get the group-level percentage change
+                pct_change = group_data['Percentage_Change'].iloc[0]
+                pre_mean = group_data['Pre_Mean'].iloc[0]
+                target_mean = group_data['Target_Mean'].iloc[0]
+                pre_n = group_data['Pre_N'].iloc[0]
+                target_n = group_data['Target_N'].iloc[0]
                 
-                # Simple bar
-                ax.bar(j, mean, yerr=std, color=bar_colors[group], 
-                      alpha=0.8, capsize=5, ecolor='black', edgecolor='black')
+                # Simple bar - no error bars since this is group-level data
+                ax.bar(j, pct_change, color=bar_colors[group], 
+                      alpha=0.8, edgecolor='black')
                 
-                # Individual points
-                np.random.seed(42)
-                x_jitter = np.random.normal(j, 0.05, len(values))
-                ax.scatter(x_jitter, values, color=point_colors[group], 
-                          s=60, alpha=0.9, edgecolors='black', linewidth=1)
-                
-                # Always show mean value on bars
-                label_y = mean + std + 3 if mean >= 0 else mean - std - 3
-                ax.text(j, label_y, f'{mean:.1f}%\n(n={len(values)})', 
-                       ha='center', va='bottom' if mean >= 0 else 'top',
-                       fontsize=11, fontweight='bold',
-                       bbox=dict(boxstyle='round,pad=0.2', 
+                # Show percentage change value and sample info
+                label_y = pct_change + 2 if pct_change >= 0 else pct_change - 2
+                ax.text(j, label_y, f'{pct_change:.1f}%\n({pre_mean:.1f}→{target_mean:.1f}%)\n(n={min(pre_n, target_n)})', 
+                       ha='center', va='bottom' if pct_change >= 0 else 'top',
+                       fontsize=9, fontweight='bold',
+                       bbox=dict(boxstyle='round,pad=0.3', 
                                 facecolor=bar_colors[group], alpha=0.8))
         
         # Format subplot
         ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        ax.set_title(f'{comparison}', fontsize=12, fontweight='bold', pad=8)  # Smaller title
+        ax.set_title(f'{comparison}', fontsize=12, fontweight='bold', pad=8)
         ax.set_xticks([0, 1])
         ax.set_xticklabels(['Active', 'SHAM'], fontsize=11, fontweight='bold')
         ax.set_ylabel('Percentage Change (%)', fontsize=11)
@@ -389,44 +385,65 @@ def create_protocol_plots(wave_df, results_dir, proto_y_lim, proto_change_lim):
                                              change_path, proto_change_lim)
 
 
-def calculate_percentage_changes(subject_df):
-    """Calculate percentage changes for within-group comparisons."""
+def calculate_group_percentage_changes(subject_df):
+    """Calculate percentage changes from group means (consistent with box plots)."""
     
-    pivot_df = subject_df.pivot_table(
-        index=['Subject_ID', 'Treatment_Group'], 
+    # Calculate group means for each stage (same as shown in box plots)
+    group_means = subject_df.groupby(['Treatment_Group', 'Stage'])['Mean_Involvement'].agg(['mean', 'count']).reset_index()
+    group_means.columns = ['Treatment_Group', 'Stage', 'Group_Mean', 'N_Subjects']
+    
+    # Pivot to get pre, stim, post columns for each group
+    pivot_df = group_means.pivot_table(
+        index='Treatment_Group', 
         columns='Stage', 
-        values='Mean_Involvement'
+        values=['Group_Mean', 'N_Subjects']
     ).reset_index()
+    
+    # Flatten column names
+    pivot_df.columns = [f"{col[1]}_{col[0]}" if col[1] else col[0] for col in pivot_df.columns]
     
     changes = []
     
     for _, row in pivot_df.iterrows():
-        subject_id = row['Subject_ID']
         group = row['Treatment_Group']
-        pre_val = row.get('pre', np.nan)
-        stim_val = row.get('stim', np.nan)
-        post_val = row.get('post', np.nan)
+        pre_mean = row.get('pre_Group_Mean', np.nan)
+        stim_mean = row.get('stim_Group_Mean', np.nan)
+        post_mean = row.get('post_Group_Mean', np.nan)
+        pre_n = row.get('pre_N_Subjects', 0)
+        stim_n = row.get('stim_N_Subjects', 0)
+        post_n = row.get('post_N_Subjects', 0)
         
-        if not np.isnan(pre_val) and pre_val > 0:
-            if not np.isnan(stim_val):
-                stim_change = ((stim_val - pre_val) / pre_val) * 100
+        if not np.isnan(pre_mean) and pre_mean > 0:
+            if not np.isnan(stim_mean):
+                stim_change = ((stim_mean - pre_mean) / pre_mean) * 100
                 changes.append({
-                    'Subject_ID': subject_id,
                     'Treatment_Group': group,
                     'Comparison': 'Stim-Pre',
-                    'Percentage_Change': stim_change
+                    'Percentage_Change': stim_change,
+                    'Pre_Mean': pre_mean,
+                    'Target_Mean': stim_mean,
+                    'Pre_N': int(pre_n),
+                    'Target_N': int(stim_n)
                 })
             
-            if not np.isnan(post_val):
-                post_change = ((post_val - pre_val) / pre_val) * 100
+            if not np.isnan(post_mean):
+                post_change = ((post_mean - pre_mean) / pre_mean) * 100
                 changes.append({
-                    'Subject_ID': subject_id,
                     'Treatment_Group': group,
-                    'Comparison': 'Post-Pre',
-                    'Percentage_Change': post_change
+                    'Comparison': 'Post-Pre', 
+                    'Percentage_Change': post_change,
+                    'Pre_Mean': pre_mean,
+                    'Target_Mean': post_mean,
+                    'Pre_N': int(pre_n),
+                    'Target_N': int(post_n)
                 })
     
     return pd.DataFrame(changes)
+
+
+def calculate_percentage_changes(subject_df):
+    """Legacy function - calls the new group-based calculation."""
+    return calculate_group_percentage_changes(subject_df)
 
 
 def plot_subject_line_charts(report_df, output_dir):

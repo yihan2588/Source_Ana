@@ -8,10 +8,6 @@ This script implements the optimal statistical approach based on our analysis:
 3. Subject-averaged statistical analysis using:
    - Wilcoxon signed-rank test for within-group comparisons (paired)
    - Mann-Whitney U test for between-group comparisons (independent)
-
-This pipeline reproduces the significant results we achieved:
-- Active Group Pre vs Stim: Wilcoxon p = 0.027344 ***SIGNIFICANT***
-- Between-group Stim: Mann-Whitney U p = 0.041958 ***SIGNIFICANT***
 """
 
 import os
