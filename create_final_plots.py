@@ -160,15 +160,16 @@ def create_simple_change_plot(changes_df, title_suffix="", output_path=None, glo
         print(f"Change plot saved: {output_path}")
 
 
-def determine_protocol_specific_limits(wave_df):
-    """Determine y-axis limits specific to protocol data (not same as overall)."""
+def determine_global_limits(wave_df, subject_df):
+    """Determine global y-axis limits that encompass both overall and protocol-specific data."""
     
     protocols = sorted([p for p in wave_df['Protocol'].unique() if p.startswith('proto')])
     
     # Get all protocol involvement values
     all_proto_involvement = []
-    all_proto_changes = []
+    all_changes = []  # This will include BOTH overall and protocol-specific changes
     
+    # 1. Get protocol-specific data
     for protocol in protocols:
         protocol_data = wave_df[wave_df['Protocol'] == protocol]
         protocol_means = protocol_data.groupby(['Subject_ID', 'Treatment_Group', 'Stage']).agg({
@@ -180,27 +181,32 @@ def determine_protocol_specific_limits(wave_df):
             # Involvement values
             all_proto_involvement.extend(protocol_means['Mean_Involvement'].values)
             
-            # Percentage changes
+            # Protocol-specific percentage changes
             changes = calculate_percentage_changes(protocol_means)
             if len(changes) > 0:
-                all_proto_changes.extend(changes['Percentage_Change'].values)
+                all_changes.extend(changes['Percentage_Change'].values)
+    
+    # 2. Get overall percentage changes
+    overall_changes = calculate_percentage_changes(subject_df)
+    if len(overall_changes) > 0:
+        all_changes.extend(overall_changes['Percentage_Change'].values)
     
     # Calculate limits
     if all_proto_involvement:
         inv_min, inv_max = np.min(all_proto_involvement), np.max(all_proto_involvement)
         inv_range = inv_max - inv_min
-        proto_involvement_lim = [inv_min - inv_range*0.1, inv_max + inv_range*0.2]
+        global_involvement_lim = [inv_min - inv_range*0.1, inv_max + inv_range*0.2]
     else:
-        proto_involvement_lim = [0, 5]
+        global_involvement_lim = [0, 5]
     
-    if all_proto_changes:
-        change_min, change_max = np.min(all_proto_changes), np.max(all_proto_changes)
+    if all_changes:
+        change_min, change_max = np.min(all_changes), np.max(all_changes)
         change_range = change_max - change_min
-        proto_change_lim = [change_min - change_range*0.1, change_max + change_range*0.2]
+        global_change_lim = [change_min - change_range*0.1, change_max + change_range*0.2]
     else:
-        proto_change_lim = [-50, 50]
+        global_change_lim = [-50, 50]
     
-    return proto_involvement_lim, proto_change_lim
+    return global_involvement_lim, global_change_lim
 
 
 def create_protocol_plots(wave_df, results_dir, proto_y_lim, proto_change_lim):
@@ -313,7 +319,7 @@ def create_simple_protocol_change_plot(changes_df, protocol, output_path, y_lim=
     if len(available_comps) == 1:
         axes = [axes]
     
-    fig.suptitle(f'Percentage Changes - {protocol}', fontsize=14, fontweight='bold', y=0.95)
+    fig.suptitle(f'Percentage Changes - {protocol}', fontsize=12, fontweight='bold', y=0.95)
     
     for i, comparison in enumerate(available_comps):
         ax = axes[i]
@@ -344,8 +350,9 @@ def create_simple_protocol_change_plot(changes_df, protocol, output_path, y_lim=
         ax.set_ylabel('Percentage Change (%)', fontsize=11)
         ax.grid(True, alpha=0.3)
         
-        # Fixed ±100% bounds for protocol plots
-        ax.set_ylim([-100, 100])
+        # Use calculated protocol change limits (same as overall)
+        if y_lim:
+            ax.set_ylim(y_lim)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -754,27 +761,16 @@ def main():
     
     print(f"\nCreating plots...")
     
-    # Determine protocol-specific limits (NOT same as overall)
-    proto_y_lim, proto_change_lim = determine_protocol_specific_limits(wave_df)
+    # Determine global limits that encompass both overall and protocol-specific data
+    global_involvement_lim, global_change_lim = determine_global_limits(wave_df, subject_df)
     
-    # Overall limits (separate from protocol)
+    # Overall limits (separate involvement, shared change scale)
     all_involvement = subject_df['Mean_Involvement'].values
     overall_y_lim = [np.min(all_involvement) - 0.2, np.max(all_involvement) + 0.3]
     
-    all_changes = calculate_percentage_changes(subject_df)
-    if len(all_changes) > 0:
-        change_vals = all_changes['Percentage_Change'].values
-        overall_change_lim = [np.min(change_vals) - 10, np.max(change_vals) + 15]
-    else:
-        overall_change_lim = [-50, 50]
-    
-    # Protocol change limits fixed to ±100%
-    proto_change_lim = [-100, 100]
-    
     print(f"  Overall y-limits: {overall_y_lim[0]:.1f} to {overall_y_lim[1]:.1f}")
-    print(f"  Protocol y-limits: {proto_y_lim[0]:.1f} to {proto_y_lim[1]:.1f}")
-    print(f"  Overall change limits: {overall_change_lim[0]:.1f} to {overall_change_lim[1]:.1f}")
-    print(f"  Protocol change limits: ±100% (fixed)")
+    print(f"  Protocol y-limits: {global_involvement_lim[0]:.1f} to {global_involvement_lim[1]:.1f}")
+    print(f"  Shared change limits (overall + protocols): {global_change_lim[0]:.1f} to {global_change_lim[1]:.1f}")
     
     # 1. Overall box plot
     print("\n1. Creating overall box plot...")
@@ -783,13 +779,14 @@ def main():
     
     # 2. Overall change plot
     print("2. Creating overall change plot...")
+    all_changes = calculate_percentage_changes(subject_df)
     if len(all_changes) > 0:
         overall_change_path = os.path.join(plots_dir, "overall_percentage_changes.png")
-        create_simple_change_plot(all_changes, "", overall_change_path, overall_change_lim)  # No suffix
+        create_simple_change_plot(all_changes, "", overall_change_path, global_change_lim)  # Use global scale
     
     # 3. Protocol-specific plots
     print("3. Creating protocol-specific plots...")
-    create_protocol_plots(wave_df, results_dir, proto_y_lim, proto_change_lim)
+    create_protocol_plots(wave_df, results_dir, global_involvement_lim, global_change_lim)
     
     # 4. Create detailed subject report
     report_path = create_subject_detailed_report(wave_df, subject_df, results_dir)
