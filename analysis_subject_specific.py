@@ -30,7 +30,7 @@ from analysis import (
     calculate_involvement_percentage_changes
 )
 
-from visualize import visualize_region_time_series
+# Removed visualize import - visualization simplified/removed
 
 
 def process_eeg_data_directory_subject_specific(directory_path, subject_condition_mapping, selected_subjects=None, selected_nights=None, visualize_regions=True, process_origins=True, source_dir=None):
@@ -289,9 +289,9 @@ def process_directory_subject_specific(directory_path, subject_id, subject_thres
                 results_by_protocol[protocol][stage].append(result)
                 processed_files += 1
 
-                # Generate region time series visualization
-                if visualize_regions:
-                    visualize_region_time_series(result, csv_file, source_dir=source_dir)
+                # Skip visualization - removed to simplify pipeline
+                # if visualize_regions:
+                #     visualize_region_time_series(result, csv_file, source_dir=source_dir)
 
             except Exception as e:
                 error_files += 1
@@ -307,7 +307,7 @@ def process_directory_subject_specific(directory_path, subject_id, subject_thres
 
 def validate_wave_result_subject_specific(result, csv_file_path=None, subject_id=None):
     """
-    Print and save validation information for a single wave file output with subject-specific details.
+    Print and save validation information for a single wave file output with subject-specific details (simplified version).
     
     Args:
         result: Dictionary containing wave analysis results from analyze_slow_wave()
@@ -317,6 +317,7 @@ def validate_wave_result_subject_specific(result, csv_file_path=None, subject_id
     wave_name = result['wave_name']
     involvement_percentage = result['involvement_percentage']
     involvement_count = result['involvement_count']
+    total_units = result.get('total_units', 0)
     subject_threshold = result.get('subject_threshold', 'Unknown')
 
     # Prepare validation output
@@ -324,16 +325,7 @@ def validate_wave_result_subject_specific(result, csv_file_path=None, subject_id
     validation_lines.append(f"[VALIDATION] Subject: {subject_id}")
     validation_lines.append(f"[VALIDATION] Wave: {wave_name}")
     validation_lines.append(f"[VALIDATION] Subject-specific threshold: {subject_threshold:.10e}")
-    validation_lines.append(f"[VALIDATION] Involvement: {involvement_percentage:.2f}% ({involvement_count} voxels)")
-
-    # Add origin information
-    origins = result.get('origins', None)
-    if origins is not None and not origins.empty:
-        validation_lines.append(f"[VALIDATION] Origin Regions ({len(origins)} regions):")
-        for _, row in origins.iterrows():
-            validation_lines.append(f"[VALIDATION]   - {row['region']} at {row['peak_time']:.2f}ms")
-    else:
-        validation_lines.append("[VALIDATION] No origin regions detected")
+    validation_lines.append(f"[VALIDATION] Involvement: {involvement_percentage:.2f}% ({involvement_count}/{total_units} units)")
 
     # Add window information
     window = result.get('window', (0, 0))

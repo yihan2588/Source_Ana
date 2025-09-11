@@ -54,7 +54,7 @@ def setup_logging(output_dir):
 
 def extract_wave_involvement_data(results_by_treatment_group, subject_thresholds):
     """
-    Extract wave-level involvement data from processed results.
+    Extract wave-level involvement data from processed results (simplified version).
     
     Args:
         results_by_treatment_group: Nested dictionary from subject-specific processing
@@ -83,10 +83,10 @@ def extract_wave_involvement_data(results_by_treatment_group, subject_thresholds
                                 'Stage': stage,
                                 'Wave_Name': wave_result.get('wave_name', ''),
                                 'Involvement_Percentage': wave_result.get('involvement_percentage', np.nan),
-                                'Involvement_Count': wave_result.get('involvement_count', np.nan),
-                                'Threshold': subject_threshold,
-                                'Global_Max_Value': wave_result.get('global_max_value', np.nan),
-                                'Global_Max_Time': wave_result.get('global_max_time', np.nan)
+                                'Involvement_Count': wave_result.get('involvement_count', np.nan),  # Now counts units, not voxels
+                                'Total_Units': wave_result.get('total_units', np.nan),  # New field
+                                'Threshold': subject_threshold
+                                # REMOVED: Global_Max_Value, Global_Max_Time (no longer calculated)
                             })
     
     df = pd.DataFrame(wave_data)

@@ -22,7 +22,7 @@ from utils import (
 
 def validate_wave_result(result, csv_file_path=None):
     """
-    Print and save validation information for a single wave file output.
+    Print and save validation information for a single wave file output (simplified version).
 
     Args:
         result: Dictionary containing wave analysis results from analyze_slow_wave()
@@ -31,20 +31,12 @@ def validate_wave_result(result, csv_file_path=None):
     wave_name = result['wave_name']
     involvement_percentage = result['involvement_percentage']
     involvement_count = result['involvement_count']
+    total_units = result.get('total_units', 0)
 
     # Prepare validation output
     validation_lines = []
     validation_lines.append(f"[VALIDATION] Wave: {wave_name}")
-    validation_lines.append(f"[VALIDATION] Involvement: {involvement_percentage:.2f}% ({involvement_count} voxels)")
-
-    # Add origin information
-    origins = result.get('origins', None)
-    if origins is not None and not origins.empty:
-        validation_lines.append(f"[VALIDATION] Origin Regions ({len(origins)} regions):")
-        for _, row in origins.iterrows():
-            validation_lines.append(f"[VALIDATION]   - {row['region']} at {row['peak_time']:.2f}ms")
-    else:
-        validation_lines.append("[VALIDATION] No origin regions detected")
+    validation_lines.append(f"[VALIDATION] Involvement: {involvement_percentage:.2f}% ({involvement_count}/{total_units} units)")
 
     # Add window and threshold information
     window = result.get('window', (0, 0))
@@ -79,24 +71,22 @@ from stats_utils import (
 )
 # Keep scipy stats import for Mann-Whitney U (group comparisons)
 from scipy import stats as scipy_stats
-from scipy.signal import find_peaks # Added for peak detection
-from visualize import visualize_region_time_series, plot_voxel_waveforms
+# Removed find_peaks import - no longer using peak detection
+# from visualize import visualize_region_time_series, plot_voxel_waveforms  # Remove unused visualization imports
 
 
-def analyze_slow_wave(df, wave_name, threshold_percent=50, process_origins=True, fixed_threshold=None):
+def analyze_slow_wave(df, wave_name, threshold_percent=50, process_origins=False, fixed_threshold=None):
     """
-    Analyze a single slow wave CSV file to extract origin and involvement metrics.
-    Uses a fixed window of -50ms to +50ms.
+    Simplified analysis of a single slow wave CSV file using direct unit counting.
+    Uses a fixed window of -50ms to +50ms and counts all region/time units above threshold.
     
     Args:
         df: DataFrame containing the wave data
         wave_name: Name identifier for the wave
-        threshold_percent: Percentage of max amplitude to use as threshold (default 50%)
-        process_origins: If True, calculate origin analysis; if False, skip origin processing
-        fixed_threshold: If provided, use this threshold instead of calculating from data
+        threshold_percent: Percentage of max amplitude to use as threshold (default 50%) - not used when fixed_threshold provided
+        process_origins: If True, calculate origin analysis; if False, skip origin processing (SIMPLIFIED: always False)
+        fixed_threshold: If provided, use this threshold instead of calculating from data (REQUIRED for subject-specific analysis)
     """
-    # Debug logging can be controlled by setting the logger level if needed
-    # logging.debug(f"\nAnalyzing {wave_name}...")
     try:
         if 'Time' in df.columns:
             # CSV format that starts with a 'Time' column
@@ -110,100 +100,54 @@ def analyze_slow_wave(df, wave_name, threshold_percent=50, process_origins=True,
                         continue
 
             time_points = np.array([float(t) for t in numeric_cols]) * 1000  # Convert to ms
-            data = np.abs(df.loc[:, numeric_cols].values)
+            data = np.abs(df.loc[:, numeric_cols].values)  # Take absolute values
             voxel_names = df.iloc[:, 0].values
         else:
             raise ValueError("CSV format doesn't match expected Format 2")
     except Exception as e:
         raise ValueError(f"Could not parse CSV format: {str(e)}")
 
+    # Apply time window filter (-50ms to +50ms)
     window_start = -50  # ms
     window_end = 50     # ms
     window_mask = (time_points >= window_start) & (time_points <= window_end)
     if sum(window_mask) == 0:
         logging.warning(f"No time points found in window [{window_start}, {window_end}] ms for {wave_name}")
-        window_mask = np.ones_like(time_points, dtype=bool) # Use all points if window is empty
+        window_mask = np.ones_like(time_points, dtype=bool)  # Use all points if window is empty
 
     window_data = data[:, window_mask]
     window_times = time_points[window_mask]
 
-    global_max_value = 0
-    global_max_time = np.nan # Use NaN if no data
+    # Determine threshold
     if window_data.size > 0:
-        max_current = np.max(window_data)
-        # Use fixed threshold if provided, otherwise calculate from data
         if fixed_threshold is not None:
             threshold = fixed_threshold
         else:
+            # Fallback to percentage-based threshold if no fixed threshold provided
+            max_current = np.max(window_data)
             threshold = max_current * (threshold_percent / 100)
-        # Find the time of the global maximum within the window
-        flat_idx = np.argmax(window_data)
-        voxel_idx_max, time_idx_max = np.unravel_index(flat_idx, window_data.shape)
-        global_max_time = window_times[time_idx_max]
-        global_max_value = max_current # This is the value
     else:
         threshold = fixed_threshold if fixed_threshold is not None else 0
 
-    voxel_peak_times = []
-    involved_voxels = []
+    # SIMPLIFIED INVOLVEMENT CALCULATION: Count all region/time units above threshold
+    if window_data.size > 0:
+        involved_units = np.sum(window_data > threshold)  # Count units above threshold
+        total_units = window_data.size  # Total number of region/time units
+        involvement_percentage = (involved_units / total_units) * 100 if total_units > 0 else 0
+    else:
+        involved_units = 0
+        total_units = 0
+        involvement_percentage = 0
 
-    for voxel_idx in range(len(data)): # Corrected indentation
-        if voxel_idx < window_data.shape[0]:
-            voxel_data = window_data[voxel_idx]
-            
-            # Use scipy.signal.find_peaks
-            peak_indices, _ = find_peaks(voxel_data, height=threshold)
-            peaks_above_threshold = []
-            if peak_indices.size > 0:
-                # Get the times and values for the found peaks
-                peak_times = window_times[peak_indices]
-                peak_values = voxel_data[peak_indices]
-                peaks_above_threshold = list(zip(peak_times, peak_values))
-
-            if peaks_above_threshold:
-                # Find the peak that is closest to 0 ms (voltage peak)
-                closest_peak = min(peaks_above_threshold, key=lambda x: abs(x[0] - 0))
-                closest_peak_time = closest_peak[0]
-                
-                region = extract_region_name(voxel_names[voxel_idx])
-                voxel_peak_times.append({
-                'full_name': voxel_names[voxel_idx],
-                'region': region,
-                'peak_time': closest_peak_time
-                })
-                involved_voxels.append(voxel_names[voxel_idx]) # Indented this line
-
-    total_voxels = len(data)
-    num_involved = len(involved_voxels)
-    involvement_percentage = (num_involved / total_voxels) * 100 if total_voxels > 0 else 0
-
-    # Identify "origins" as the earliest 10% of involved voxels
-    origins = []
-    if process_origins and voxel_peak_times:
-        peak_times_df = pd.DataFrame(voxel_peak_times).sort_values('peak_time')
-        n_origins = max(1, int(len(peak_times_df) * 0.1))
-        origins = peak_times_df.head(n_origins)
-    elif not process_origins:
-        # Create empty DataFrame with expected columns when origins are skipped
-        origins = pd.DataFrame(columns=['full_name', 'region', 'peak_time'])
-
-    # Debug logging can be controlled by setting the logger level if needed
-    # logging.debug(f"Involvement: {involvement_percentage:.1f}% ({num_involved}/{total_voxels} voxels)")
-    # if voxel_peak_times:
-    #     logging.debug("Top origin regions:")
-    #     for _, row in origins.iterrows():
-    #         logging.debug(f"- {row['region']} at {row['peak_time']:.1f}ms")
-
+    # SIMPLIFIED RETURN: Remove origin analysis and peak detection
     return {
         'wave_name': wave_name,
-        'origins': origins,  # a small DataFrame of earliest 10% voxel-peak times
-        'involvement_count': num_involved,
+        'involvement_count': involved_units,  # Now counts units, not voxels
         'involvement_percentage': involvement_percentage,
-        'involved_voxels': involved_voxels,
+        'total_units': total_units,  # New field for transparency
         'window': (window_start, window_end),
-        'threshold': threshold,
-        'global_max_value': global_max_value,
-        'global_max_time': global_max_time
+        'threshold': threshold
+        # REMOVED: origins, involved_voxels, global_max_value, global_max_time, voxel_peak_times
     }
 
 
@@ -458,10 +402,9 @@ def process_directory(directory_path, quiet=False, visualize_regions=True, proce
                 results_by_protocol[protocol][stage].append(result)
                 processed_files += 1
 
-                # Generate region time series visualization
-                if visualize_regions:
-                    # Use source_dir if provided, otherwise use the standard 'results' directory
-                    visualize_region_time_series(result, csv_file, source_dir=source_dir) # output_dir handled internally
+                # Skip visualization - removed to simplify pipeline
+                # if visualize_regions:
+                #     visualize_region_time_series(result, csv_file, source_dir=source_dir)
 
                 # logging.info(f"Processed {filename} - Protocol: {protocol}, Stage: {stage}") # Logged by validate_wave_result
             except Exception as e:
